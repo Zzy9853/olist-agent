@@ -76,9 +76,14 @@ def main():
         """)
 
     # 用户宽表（含 XGBoost 预测概率 churn_prob，预测类问题直接查它）
+    # 去重：源宽表含 122 个"同用户多地址"行（customer_unique_id 重复，
+    # 行为特征相同、地址列不同，评测发现于 2026-08-03）——每用户保留首行
     con.execute(f"""
         CREATE TABLE user_wide AS
-        SELECT * FROM read_csv_auto('{WIDE_CSV.replace(chr(92), '/')}')
+        SELECT * EXCLUDE (rn) FROM (
+            SELECT *, ROW_NUMBER() OVER (PARTITION BY customer_unique_id ORDER BY 1) AS rn
+            FROM read_csv_auto('{WIDE_CSV.replace(chr(92), '/')}')
+        ) WHERE rn = 1
     """)
 
     # AB 实验敏感性分析结果（R$15/25/50 券 × 6 档留存提升率）
