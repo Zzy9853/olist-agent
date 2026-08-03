@@ -19,13 +19,17 @@ def validate_sql(sql: str) -> tuple[bool, str]:
     except Exception as e:
         return False, f"SQL 解析失败: {e}"
 
-    if not isinstance(tree, exp.Select):
+    # 允许 SELECT 及其集合操作（UNION/INTERSECT/EXCEPT，sqlglot 解析为 SetOperation 子类）
+    if not isinstance(tree, (exp.Select, exp.SetOperation)):
         return False, f"只允许 SELECT 语句，收到: {type(tree).__name__}"
 
-    # 收集所有表名，检查白名单
+    # WITH 定义的 CTE 名是查询内临时表，不属于物理白名单
+    cte_names = {cte.alias_or_name.lower() for cte in tree.find_all(exp.CTE)}
+
+    # 收集所有物理表名，检查白名单
     for table in tree.find_all(exp.Table):
         name = table.name.lower()
-        if name not in ALLOWED_TABLES:
+        if name not in ALLOWED_TABLES and name not in cte_names:
             return False, f"表 {name} 不在白名单中"
 
     # 自动 LIMIT 兜底（已有 LIMIT 则不动）
