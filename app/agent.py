@@ -40,6 +40,9 @@ def _gen_sql(state: State) -> State:
     """生成 SQL（含重试：第二次带校验错误信息）。"""
     retry_info = ""
     if state.get("error"):
+        # 重试计数：必须在本节点内递增（节点的返回值才是 state 更新，
+        # 路由函数里的修改不会写回状态通道，会导致无限重试）
+        state["attempts"] = state.get("attempts", 0) + 1
         retry_info = f"\n上次 SQL 未通过校验，错误：{state['error']}。请修正后重新生成。"
     content = GEN_PROMPT.format() + retry_info + f"\n用户问题：{state['question']}"
     messages = [{"role": "system", "content": state["system_prompt"]}] + state.get("messages", []) + [
@@ -68,7 +71,6 @@ def _route_sql(state: State) -> str:
     if state["sql"] is not None:
         return "execute"
     if state.get("attempts", 0) < MAX_RETRY:
-        state["attempts"] = state.get("attempts", 0) + 1
         return "retry"
     return "clarify"
 
