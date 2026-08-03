@@ -8,6 +8,8 @@ CASES = [
     ("SELECT customer_state, COUNT(*) FROM user_wide GROUP BY 1 ORDER BY 2 DESC", True),
     ("SELECT * FROM user_wide LIMIT 5", True),
     ("SELECT * FROM valid_orders LIMIT 3", True),
+    ("SELECT customer_state FROM user_wide WHERE is_churned = 1 UNION SELECT customer_state FROM user_wide WHERE is_churned = 0", True),
+    ("WITH t AS (SELECT * FROM orders) SELECT COUNT(*) FROM t", True),
     ("DROP TABLE orders", False),
     ("DELETE FROM orders", False),
     ("INSERT INTO orders VALUES (1)", False),
