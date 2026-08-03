@@ -2,7 +2,7 @@
 
 - **日期**：2026-08-03
 - **主题**：Olist 智能问数 Agent M2——NL2SQL 核心链路（编排 / 知识注入 / LLM 选型 / SQL 安全校验）的技术选型
-- **状态**：已实施（LangGraph 五节点状态图，EX 95%）
+- **状态**：已实施（LangGraph 五节点状态图——validate 内联于 gen_sql，EX 95%；面试叙事口径为"六节点"将校验单列，见 docs/interview/01）
 - **作者**：Claude Code + 赵洲宇（项目 Owner）
 
 ## 背景
@@ -41,7 +41,7 @@ M2 的目标是把自然语言问题转成 DuckDB SQL 并执行解读。这条�
 
 ### 决策
 
-**B：LangGraph StateGraph**（`app/agent.py`，五节点：retrieve → gen_sql → execute → explain + clarify，条件边三出口）。
+**B：LangGraph StateGraph**（`app/agent.py`，五节点：retrieve → gen_sql → execute → explain + clarify，条件边三出口；SQL 校验是 gen_sql 节点的内联步骤，叙事口径可单列为"校验闸门"）。
 
 ### 理由
 

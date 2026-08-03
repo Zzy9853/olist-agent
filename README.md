@@ -8,8 +8,8 @@
 ① UI 层      Streamlit 聊天界面 + 图表 + 数据表格          [M3]
 ② Agent 编排  LangGraph 状态图：retrieve → gen_sql → validate [M2]
              → execute → explain，校验失败重试 1 次转澄清
-③ 工具层      DuckDB 只读连接 / sqlglot AST 校验 / 会话记忆  [M2]
-④ 知识层      RAG：schema + 指标口径 + 历史问答对            [M2]
+③ 工具层      DuckDB 只读连接 / sqlglot AST 校验 / 会话记忆  [M2]（记忆 M3）
+④ 知识层      RAG：schema + 指标口径 + 历史问答对            [M2]（问答对 M3）
 ⑤ 数据层      DuckDB olist.db（9 原始表 + 宽表 + AB 表）     [M1 ✅]
 ```
 
