@@ -1,0 +1,28 @@
+
+EX = 13/20 = 65%
+
+❌ Q01: 结果不一致
+  gen=SELECT ROUND(AVG(is_churned) * 100, 2) AS churn_rate_pct, COUNT(*) AS total_users, SUM(is_churned) AS churned_users FROM user_wide LIMIT 200
+ref=SELECT ROUND(AVG(is_churned),4) AS churn_rate FROM 
+
+❌ Q04: 结果不一致
+  gen=SELECT ROUND(AVG(avg_order_value), 2) AS avg_order_value FROM user_wide LIMIT 200
+ref=SELECT AVG(avg_order_value) AS avg_aov FROM user_wide
+
+❌ Q08: 结果不一致
+  gen=SELECT customer_state, COUNT(DISTINCT customer_unique_id) AS user_count FROM user_wide GROUP BY customer_state ORDER BY user_count DESC LIMIT 10
+ref=SELECT customer_state, COUNT(*) AS users FROM u
+
+❌ Q14: 结果不一致
+  gen=SELECT ROUND(AVG(total_revenue), 2) AS avg_total_revenue FROM user_wide WHERE churn_prob > 0.8 LIMIT 200
+ref=SELECT AVG(total_revenue) AS avg_rev FROM user_wide WHERE churn_prob > 0.8
+
+❌ Q17: 结果不一致
+  gen=SELECT DATE_TRUNC('MONTH', order_purchase_timestamp) AS order_month, COUNT(DISTINCT order_id) AS order_count FROM orders WHERE order_purchase_timestamp >= CAST('2018-01-01' AS TIMESTAMP) AND order
+
+❌ Q18: 结果不一致
+  gen=SELECT payment_type, COUNT(DISTINCT order_id) AS order_count FROM order_payments GROUP BY payment_type ORDER BY order_count DESC LIMIT 200
+ref=SELECT payment_type, COUNT(*) AS cnt FROM order_payme
+
+❌ Q20: 结果不一致
+  gen=SELECT customer_state, ROUND(AVG(total_revenue), 2) AS avg_revenue_churned, COUNT(*) AS churned_users FROM user_wide WHERE is_churned = 1 GROUP BY customer_state ORDER BY avg_revenue_churned DESC 

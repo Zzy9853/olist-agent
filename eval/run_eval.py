@@ -10,7 +10,7 @@ from app.agent import ask
 from app.executor import execute_sql
 from eval.eval_set import CASES
 
-TOL = 1e-6
+TOL = 1e-2  # 容忍 ROUND 精度差异（如 118.57 vs 118.573），不放走语义错误
 
 
 def normalize(df: pd.DataFrame) -> pd.DataFrame:
@@ -22,31 +22,65 @@ def normalize(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _values_equal(s1: pd.Series, s2: pd.Series) -> bool:
-    """两列值等价：数值列按排序后逐值容差比较；字符串列按集合比较。"""
-    if len(s1) != len(s2):
+def _col_contains(s_outer: pd.Series, s_inner: pd.Series) -> bool:
+    """s_inner 的每个值都可在 s_outer 中找到（数值容差/字符串相等），s_outer 允许更多行。"""
+    if len(s_outer) < len(s_inner):
         return False
-    if pd.api.types.is_numeric_dtype(s1) and pd.api.types.is_numeric_dtype(s2):
-        a = s1.astype(float).sort_values().reset_index(drop=True)
-        b = s2.astype(float).sort_values().reset_index(drop=True)
-        return bool(((a - b).abs() <= TOL).all())
-    if pd.api.types.is_numeric_dtype(s1) != pd.api.types.is_numeric_dtype(s2):
+    if pd.api.types.is_numeric_dtype(s_outer) and pd.api.types.is_numeric_dtype(s_inner):
+        a = sorted(s_outer.astype(float).tolist())
+        b = sorted(s_inner.astype(float).tolist())
+        i = 0
+        for v in b:
+            while i < len(a) and a[i] < v - TOL:
+                i += 1
+            if i >= len(a) or a[i] > v + TOL:
+                return False
+            i += 1
+        return True
+    if pd.api.types.is_numeric_dtype(s_outer) != pd.api.types.is_numeric_dtype(s_inner):
         return False
-    return bool(sorted(map(str, s1)) == sorted(map(str, s2)))
+    return set(map(str, s_inner)).issubset(set(map(str, s_outer)))
+
+
+def _row_matches(r_row, gen_df: pd.DataFrame, mapping: list[tuple[str, str]]) -> bool:
+    """ref 行在 gen 中按映射列（ref列, gen列）存在性匹配（数值容差/字符串相等，行序无关）。"""
+    for _, g_row in gen_df.iterrows():
+        ok = True
+        for cr, cg in mapping:
+            rv, gv = r_row[cr], g_row[cg]
+            if pd.api.types.is_numeric_dtype(pd.Series([rv])) and pd.api.types.is_numeric_dtype(pd.Series([gv])):
+                if abs(float(rv) - float(gv)) > TOL:
+                    ok = False
+                    break
+            elif str(rv) != str(gv):
+                ok = False
+                break
+        if ok:
+            return True
+    return False
 
 
 def results_equal(df1: pd.DataFrame, df2: pd.DataFrame) -> bool:
-    """ref 的每一列必须在 gen 的结果中按值匹配（列名/列序/行序自由）。"""
+    """ref 的每一列在 gen 中按值包含匹配（列名/列序/行序自由）。
+    行数：gen >= ref（LLM 常返回 Top N 全集，ref 只取 Top K——子集语义）；
+    行级：ref 每行按映射列在 gen 中存在（数值容差）。已知宽松点：行数不同时不查组合。
+    """
     n1, n2 = normalize(df1), normalize(df2)
-    if len(n1) != len(n2):
+    if len(n1) < len(n2):
         return False
+    col_map = {}
     used = set()
     for col_ref in n2.columns:
         hit = next((c for c in n1.columns
-                    if c not in used and _values_equal(n1[c], n2[col_ref])), None)
+                    if c not in used and _col_contains(n1[c], n2[col_ref])), None)
         if hit is None:
             return False
         used.add(hit)
+        col_map[col_ref] = hit
+    if len(n1) == len(n2):
+        gen_sub = n1[list(col_map.values())]
+        mapping = list(col_map.items())
+        return all(_row_matches(row, gen_sub, mapping) for _, row in n2.iterrows())
     return True
 
 

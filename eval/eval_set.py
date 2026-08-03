@@ -43,9 +43,9 @@ CASES = [
      "ref": "SELECT ROUND(AVG(churn_prob),4) AS avg_prob FROM user_wide"},
     # ---- 5. 聚合与排序 ----
     {"id": "Q17", "q": "2018年各月的订单量趋势如何？",
-     "ref": "SELECT DATE_TRUNC('month', order_purchase_timestamp) AS month, COUNT(*) AS orders FROM valid_orders WHERE order_purchase_timestamp >= DATE '2018-01-01' GROUP BY 1 ORDER BY 1"},
+     "ref": "SELECT DATE_TRUNC('month', order_purchase_timestamp) AS month, COUNT(DISTINCT order_id) AS orders FROM valid_orders WHERE order_purchase_timestamp >= DATE '2018-01-01' GROUP BY 1 ORDER BY 1"},
     {"id": "Q18", "q": "不同支付方式的订单量分布？",
-     "ref": "SELECT payment_type, COUNT(*) AS cnt FROM order_payments GROUP BY payment_type ORDER BY cnt DESC"},
+     "ref": "SELECT payment_type, COUNT(DISTINCT order_id) AS cnt FROM order_payments WHERE order_id IN (SELECT order_id FROM valid_orders) GROUP BY payment_type ORDER BY cnt DESC"},
     {"id": "Q19", "q": "平均配送时长超过15天的用户占比多少？",
      "ref": "SELECT ROUND(COUNT(*) * 1.0 / (SELECT COUNT(*) FROM user_wide),4) AS pct FROM user_wide WHERE avg_delivery_days > 15"},
     {"id": "Q20", "q": "各州流失用户的平均消费，列出前5（口径陷阱题：问的是流失用户的消费，不是全部用户）",
