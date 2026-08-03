@@ -18,7 +18,7 @@
 - [x] **M1 数据层**（2026-08-03）：olist.db（9 原始表 + user_wide 95,106×32 + ab_test_results），只读连接验证通过
 - [x] M1 知识库：`knowledge/schema.md`（数据字典）+ `knowledge/metrics.md`（指标口径 + 7 条 SQL 模板，全部验证可执行）
 - [x] **M2 核心链路**（2026-08-03）：LangGraph 状态图（六节点 + 重试/澄清）+ sqlglot AST 校验（14/14 用例）+ 20 问评测集 **EX 95%**（两轮迭代 65% → 95%）+ 安全四道闸（AST 类型 / 12 表白名单 / 自动 LIMIT 200 / 5s 超时）+ RAG 架构预留（ChromaDB 16 块 + qwen embedding，EX 持平）——架构决策见 `docs/adr/2026-08-03-m2-nl2sql-architecture.md`
-- [x] **M3 产品化**（2026-08-03）：Streamlit 聊天 UI（`python -m streamlit run app/app.py`）+ intent 分类（query/explain/unsupported 路由）+ SHAP 归因（TreeExplainer 用户 Top 特征贡献）+ 多轮会话记忆（messages 注入，追问"那圣保罗呢"→SP 流失率 79.22%）；流失模型重训 **PR-AUC 0.9722** —— 面试素材见 `docs/interview/`，决策与踩坑见 `eval/iter_log.md` M3 小节
+- [x] **M3 产品化**（2026-08-03）：Streamlit 聊天 UI（`python -m streamlit run app/ui.py`）+ intent 分类（query/explain/unsupported 路由）+ SHAP 归因（TreeExplainer 用户 Top 特征贡献）+ 多轮会话记忆（messages 注入，追问"那圣保罗呢"→SP 流失率 79.22%）；流失模型重训 **PR-AUC 0.9722** —— 面试素材见 `docs/interview/`，决策与踩坑见 `eval/iter_log.md` M3 小节
 
 ## 使用
 
@@ -33,7 +33,7 @@ python -c "import duckdb; con = duckdb.connect('data/olist.db', read_only=True);
 ## 演示（30 秒版）
 
 ```bash
-python -m streamlit run app/app.py
+python -m streamlit run app/ui.py
 ```
 
 三步话术（面试边演示边讲，详细脚本见 `docs/interview/01-项目介绍.md` 演示叙事段）：
