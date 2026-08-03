@@ -43,10 +43,17 @@ _STORE: KnowledgeStore | None = None
 
 
 def _get_store() -> KnowledgeStore:
-    """模块级缓存持久化 store（磁盘连接复用，避免每次查询重建实例）。"""
+    """模块级缓存持久化 store（磁盘连接复用，避免每次查询重建实例）。
+    首次创建时同步索引：文档 hash 未变则跳过，变了则重建（防静默过期）。
+    """
     global _STORE
     if _STORE is None:
         _STORE = KnowledgeStore()
+        try:
+            from app.knowledge import load_knowledge
+            _STORE.ensure_index(load_knowledge())
+        except Exception as e:
+            print(f"[rag] 索引初始化失败: {e}", file=sys.stderr)
     return _STORE
 
 
