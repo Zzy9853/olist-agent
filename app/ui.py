@@ -1,6 +1,7 @@
-# app/app.py
+# app/ui.py
 """Olist 智能问数 Agent — Streamlit 聊天界面。
-运行：python -m streamlit run app/app.py
+运行：python -m streamlit run app/ui.py
+注意：脚本名不能是 app.py（与 app/ 包同名会劫持 import app.xxx 的解析）。
 """
 import pandas as pd
 import streamlit as st

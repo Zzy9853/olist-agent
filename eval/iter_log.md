@@ -76,7 +76,7 @@ Q18（支付方式订单量分布）两次失败形态不同：T7 是带 valid_o
 
 ## 决策 2：图表模板化——LLM 不生成绘图代码
 
-**决策**：Streamlit 端 `render_chart` 用预置模板（列名含 date/month → 折线；Top N ≤ 20 → 柱状；大结果 → 表格），LLM 只生成 SQL 和文字解读，绝不生成绘图代码（`app/app.py`）。
+**决策**：Streamlit 端 `render_chart` 用预置模板（列名含 date/month → 折线；Top N ≤ 20 → 柱状；大结果 → 表格），LLM 只生成 SQL 和文字解读，绝不生成绘图代码（`app/ui.py`）。
 
 **理由**：①安全——LLM 生成 Python/JS 绘图代码 = 引入任意代码执行面，与四道闸的安全设计矛盾；②输出可控——图表质量不随模型采样波动；③省 token 与延迟。需要 LLM 的是语义（写 SQL、写解读），不是机械渲染。
 
