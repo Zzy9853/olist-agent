@@ -1,16 +1,18 @@
 # app/agent.py
-"""LangGraph 编排：问题 → 生成 SQL → 校验 → 执行 → 解读。
+"""LangGraph 编排：RAG 检索 → 生成 SQL → 校验 → 执行 → 解读。
 失败路径：校验失败重试 1 次（携带错误信息）；仍失败转澄清追问。
 """
 import json
+import sys
 from typing import TypedDict
 
 from langgraph.graph import StateGraph, START, END
 
-from app.config import MAX_RETRY
+from app.config import MAX_RETRY, RAG_ENABLED
 from app.executor import execute_sql
 from app.knowledge import build_system_prompt
 from app.llm import chat, chat_json
+from app.rag import KnowledgeStore
 from app.validator import validate_sql
 
 GEN_PROMPT = """根据上下文生成 DuckDB SQL 回答用户问题。
@@ -34,6 +36,36 @@ class State(TypedDict):
     result: str               # DataFrame 序列化文本或错误
     answer: str               # 最终回答
     error: str | None
+    rag_context: str          # RAG 检索补充上下文（可空，retrieve 节点填充）
+
+
+_STORE: KnowledgeStore | None = None
+
+
+def _get_store() -> KnowledgeStore:
+    """模块级缓存持久化 store（磁盘连接复用，避免每次查询重建实例）。"""
+    global _STORE
+    if _STORE is None:
+        _STORE = KnowledgeStore()
+    return _STORE
+
+
+def _retrieve(state: State) -> State:
+    """RAG 检索：命中块拼为补充上下文，增量追加到 system prompt 末尾。
+    检索失败/关闭时 rag_context 为空——RAG 是补充，不影响主链路。
+    """
+    rag = ""
+    if RAG_ENABLED:
+        try:
+            hits = _get_store().retrieve(state["question"], top_k=3)
+        except Exception as e:
+            print(f"[rag] 检索失败，降级为无 RAG 上下文: {e}", file=sys.stderr)
+            hits = []
+        if hits:
+            rag = "\n\n## RAG 检索补充上下文\n" + "\n---\n".join(hits)
+    state["rag_context"] = rag
+    state["system_prompt"] = build_system_prompt(extra_context=rag)
+    return state
 
 
 def _gen_sql(state: State) -> State:
@@ -103,11 +135,13 @@ def _clarify(state: State) -> State:
 
 def build_graph():
     g = StateGraph(State)
+    g.add_node("retrieve", _retrieve)
     g.add_node("gen_sql", _gen_sql)
     g.add_node("execute", _execute)
     g.add_node("explain", _explain)
     g.add_node("clarify", _clarify)
-    g.add_edge(START, "gen_sql")
+    g.add_edge(START, "retrieve")
+    g.add_edge("retrieve", "gen_sql")
     g.add_conditional_edges("gen_sql", _route_sql,
                             {"execute": "execute", "retry": "gen_sql", "clarify": "clarify"})
     g.add_edge("execute", "explain")
@@ -124,12 +158,13 @@ def ask(question: str, messages: list[dict] | None = None) -> dict:
     init: State = {
         "question": question,
         "messages": messages or [],
-        "system_prompt": build_system_prompt(),
+        "system_prompt": build_system_prompt(),  # RAG 补充上下文由 retrieve 节点增量注入
         "attempts": 0,
         "sql": None,
         "result": "",
         "answer": "",
         "error": None,
+        "rag_context": "",
     }
     out = GRAPH.invoke(init)
     return {"answer": out.get("answer", ""), "sql": out.get("sql")}

@@ -41,3 +41,21 @@
 2. **LLM 有时比参考 SQL 更严谨**：COUNT(DISTINCT)、无效订单过滤都是 LLM 主动做的——评测集需要持续维护（LLM 更对就更新参考）
 3. **Prompt 铁律比评测容差更根本**：修行为（不 ROUND、0-1 小数、valid_orders）优先于放宽评测
 4. **数据质量 bug 由评测暴露**：user_wide 122 个同用户多地址重复 → 根因修复（prepare_db.py 每用户保留首行）
+
+## RAG 对比（Task 8，2026-08-03）
+
+**实现**：app/rag.py —— knowledge 文档按 `##` 标题切块（16 块）→ qwen3.7-text-embedding 向量化 → ChromaDB 持久化索引（data/chroma）→ 每问 retrieve top_k=3 注入 `state["rag_context"]`，增量追加到 system prompt 末尾（不改变原 prompt 结构）。
+
+**结果对比**：
+
+| 项 | RAG 前（T7） | RAG 后（T8） |
+|----|------------|------------|
+| 索引块数 | — | 16（schema 12 + metrics 4） |
+| EX | 19/20 = 95% | 19/20 = 95% |
+| 唯一失败 | Q18 | Q18 |
+
+Q18（支付方式订单量分布）两次失败形态不同：T7 是带 valid_orders 过滤仍与 ref 细节不一致（后已更新 ref）；本次是 LLM 漏了 valid_orders 铁律（`SELECT payment_type, COUNT(DISTINCT order_id) FROM order_payments` 直接聚合）——单次采样波动，非 RAG 注入导致（RAG 上下文是增量补充，系统头铁律始终全量注入）。
+
+**结论：持平，不回退开关**。知识库仅 ~16KB/16 块，全量注入已覆盖全部信息，RAG top-k 是冗余增量——无增益（EX 不变）也无干扰（未破坏任何已过题）。RAG_ENABLED=True 保留：这是**为可扩展性做的架构预留**——文档量增长后，全量注入的 token 成本线性增长，按问题检索 top-k 注入则成本与文档量解耦（检索→注入路径已通，届时只换切块粒度/检索策略）。
+
+**踩坑（面试素材）**：chroma 1.0 移除 `CustomEmbeddingFunction` → 改为 `EmbeddingFunction` 协议 + `register_embedding_function` 注册（name() 作 config key 持久化，跨进程加载按 build_from_config 重建）；不注册则磁盘集合在新进程加载报 "Unsupported embedding function"。

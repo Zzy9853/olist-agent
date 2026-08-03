@@ -31,3 +31,4 @@ ALLOWED_TABLES = {"orders", "customers", "order_items", "order_payments",
                   "order_reviews", "products", "sellers",
                   "product_category_translation", "geolocation",
                   "user_wide", "ab_test_results", "valid_orders"}
+RAG_ENABLED = True          # RAG 检索开关（False 时 retrieve 节点直接跳过）

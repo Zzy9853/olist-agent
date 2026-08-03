@@ -27,11 +27,16 @@ def load_knowledge() -> dict:
     return {"schema": schema, "metrics": metrics}
 
 
-def build_system_prompt(knowledge: dict | None = None) -> str:
-    """组装 system prompt：头部规则 + schema 字典 + 口径字典。"""
+def build_system_prompt(knowledge: dict | None = None, extra_context: str = "") -> str:
+    """组装 system prompt：头部规则 + schema 字典 + 口径字典（+ RAG 补充上下文）。
+    extra_context 非空时原样追加到末尾——RAG 是增量，不改变原 prompt 结构。
+    """
     k = knowledge or load_knowledge()
-    return "\n\n".join([
+    prompt = "\n\n".join([
         SYSTEM_HEADER,
         "## 数据字典（表结构）\n" + k["schema"],
         "## 口径字典（指标定义与 SQL 规则，最高优先级）\n" + k["metrics"],
     ])
+    if extra_context:
+        prompt += extra_context
+    return prompt
