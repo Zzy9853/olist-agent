@@ -2,6 +2,7 @@
 """RAG 检索：知识库文档切块 → qwen3.7-text-embedding 向量化 → ChromaDB 检索。
 文档量小阶段：切块粒度=按标题分节；检索命中 top-k 注入 few-shot 上下文。
 """
+import hashlib
 import chromadb
 from chromadb.utils import embedding_functions
 
@@ -9,6 +10,11 @@ from app.config import KNOWLEDGE_DIR, EMBED_MODEL
 from app.llm import embed_texts
 
 COLLECTION_NAME = "olist_knowledge"
+HASH_KEY = "doc_hash"
+
+
+def _doc_hash(knowledge: dict) -> str:
+    return hashlib.md5((knowledge["schema"] + knowledge["metrics"]).encode()).hexdigest()
 
 
 @embedding_functions.register_embedding_function
@@ -61,16 +67,24 @@ class KnowledgeStore:
             COLLECTION_NAME,
             embedding_function=_QwenEmbeddingFunction())
 
-    def index(self, knowledge: dict) -> int:
-        """重建索引（幂等：清空后重建）。返回块数。"""
+    def ensure_index(self, knowledge: dict) -> int:
+        """幂等索引：文档 hash 未变则跳过；变了或索引空则重建。返回块数。
+
+        hash 存于 collection metadata（chroma 1.5.9 的 delete 不接受 where=None，
+        清空必须传 ids）。
+        """
+        current = (self.col.metadata or {}).get(HASH_KEY)
+        if self.col.count() and current == _doc_hash(knowledge):
+            return self.col.count()
         if self.col.count():
-            self.col.delete(where=None)
+            self.col.delete(ids=self.col.get()["ids"])
         chunks = []
         chunks += _chunk_md(knowledge["schema"], "schema")
         chunks += _chunk_md(knowledge["metrics"], "metrics")
         self.col.add(ids=[c["id"] for c in chunks],
                      documents=[c["text"] for c in chunks],
                      metadatas=[{"title": c["title"]} for c in chunks])
+        self.col.modify(metadata={HASH_KEY: _doc_hash(knowledge)})
         return len(chunks)
 
     def retrieve(self, question: str, top_k: int = 3) -> list[str]:
