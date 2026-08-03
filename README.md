@@ -6,8 +6,8 @@
 
 ```
 ① UI 层      Streamlit 聊天界面 + 图表 + 数据表格          [M3]
-② Agent 编排  LangGraph 状态图：intent → retrieve → gen_sql  [M2]
-             → validate → execute → explain → respond
+② Agent 编排  LangGraph 状态图：retrieve → gen_sql → validate [M2]
+             → execute → explain，校验失败重试 1 次转澄清
 ③ 工具层      DuckDB 只读连接 / sqlglot AST 校验 / 会话记忆  [M2]
 ④ 知识层      RAG：schema + 指标口径 + 历史问答对            [M2]
 ⑤ 数据层      DuckDB olist.db（9 原始表 + 宽表 + AB 表）     [M1 ✅]
@@ -17,8 +17,8 @@
 
 - [x] **M1 数据层**（2026-08-03）：olist.db（9 原始表 + user_wide 95,106×32 + ab_test_results），只读连接验证通过
 - [x] M1 知识库：`knowledge/schema.md`（数据字典）+ `knowledge/metrics.md`（指标口径 + 7 条 SQL 模板，全部验证可执行）
-- [ ] M2 核心链路：LangGraph + sqlglot 校验 + 20 问评测集
-- [ ] M3 产品化：Streamlit UI + 会话记忆 + SHAP 归因
+- [x] **M2 核心链路**（2026-08-03）：LangGraph 状态图（六节点 + 重试/澄清）+ sqlglot AST 校验（14/14 用例）+ 20 问评测集 **EX 95%**（两轮迭代 65% → 95%）+ 安全四道闸（AST 类型 / 12 表白名单 / 自动 LIMIT 200 / 5s 超时）+ RAG 架构预留（ChromaDB 16 块 + qwen embedding，EX 持平）——架构决策见 `docs/adr/2026-08-03-m2-nl2sql-architecture.md`
+- [ ] **M3 产品化**：Streamlit UI + 会话记忆 + SHAP 归因 + intent 分类
 
 ## 使用
 
