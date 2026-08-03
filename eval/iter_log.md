@@ -59,3 +59,55 @@ Q18（支付方式订单量分布）两次失败形态不同：T7 是带 valid_o
 **结论：持平，不回退开关**。知识库仅 ~16KB/16 块，全量注入已覆盖全部信息，RAG top-k 是冗余增量——无增益（EX 不变）也无干扰（未破坏任何已过题）。RAG_ENABLED=True 保留：这是**为可扩展性做的架构预留**——文档量增长后，全量注入的 token 成本线性增长，按问题检索 top-k 注入则成本与文档量解耦（检索→注入路径已通，届时只换切块粒度/检索策略）。
 
 **踩坑（面试素材）**：chroma 1.0 移除 `CustomEmbeddingFunction` → 改为 `EmbeddingFunction` 协议 + `register_embedding_function` 注册（name() 作 config key 持久化，跨进程加载按 build_from_config 重建）；不注册则磁盘集合在新进程加载报 "Unsupported embedding function"。
+
+---
+
+# M3 产品化决策与踩坑记录（2026-08-03）
+
+> M3 决策实录：intent 路由、图表模板化、多轮记忆、归因工具、版本坑。全部来自 M3 开发的真实决策与实测。
+
+## 决策 1：intent 并入 GEN_PROMPT 的 JSON 输出（省一次 LLM 调用）
+
+**决策**：intent（query/explain/unsupported）不单独调 LLM 分类，并入 gen_sql 的结构化输出——一次请求同时返回 `intent + sql + reasoning + uid`（`app/agent.py` GEN_PROMPT）。
+
+**理由**：若先 intent 分类再路由到子工作流，query 场景要多一次 LLM 调用（延迟 + 成本 + 一个失败点）；并入后 explain 场景一次调用直达归因节点，query 场景行为零变化。分类不是"额外的一层"，而是生成任务的附带产物。
+
+**边界 case（实测）**：explain 问题未提取到 uid → 降级 unsupported（error = "归因问题需要用户 ID，请提供（32 位十六进制）"），绝不带病进归因节点；旧格式输出（无 intent 字段）默认 query 兼容。
+
+## 决策 2：图表模板化——LLM 不生成绘图代码
+
+**决策**：Streamlit 端 `render_chart` 用预置模板（列名含 date/month → 折线；Top N ≤ 20 → 柱状；大结果 → 表格），LLM 只生成 SQL 和文字解读，绝不生成绘图代码（`app/app.py`）。
+
+**理由**：①安全——LLM 生成 Python/JS 绘图代码 = 引入任意代码执行面，与四道闸的安全设计矛盾；②输出可控——图表质量不随模型采样波动；③省 token 与延迟。需要 LLM 的是语义（写 SQL、写解读），不是机械渲染。
+
+## 决策 3：多轮 messages 注入 vs LangGraph checkpointer
+
+**决策**：多轮记忆用 UI 层 `session_state` + `ask(messages=history)` 把历史消息拼进 gen_sql 上下文，不用 LangGraph checkpointer。
+
+**理由**：checkpointer 的价值在增量持久化（线程/会话恢复、图状态回放），当前单会话演示场景用不上；messages 注入实现简单、行为可测。生产化（多用户并发、会话恢复）时换 checkpointer，图结构零改动（多轮只影响 gen_sql 的输入拼装）。
+
+**验证（实测）**：第一轮"哪些州的用户流失率最高？列出前3" → 第二轮追问"那圣保罗的流失率具体是多少？" → 正确生成 SP 州查询，SP 流失率 79.22%（39,739 用户）。演示脚本追问"那圣保罗呢"同样命中（省略主题靠历史解析）。
+
+## 决策 4：归因工具——模型重训 + TreeExplainer
+
+**决策**：电商项目无已保存模型，用清理后的宽表（94,983 行）重训 XGBoost 流失模型（24 特征，复用电商项目参数：n_estimators=200, max_depth=6, learning_rate=0.05, scale_pos_weight=负/正比, random_state=42）保存为 `data/churn_model.json`；归因用 shap.TreeExplainer（树模型精确解，非 KernelExplainer 近似）。
+
+**实测结果**：流失率 81.20%，**PR-AUC（训练集）0.9722**。
+
+**验证（SHAP 可加性恒等式）**：`expected_value + Σ(特征贡献) → sigmoid = 模型预测概率`，示例用户实测差 6e-8——归因数值可审计，不是黑盒解释。示例用户 97981245c3257ea9b14befffd560177b：流失概率 66.7%，Top1 avg_delivery_days（值 18.5，贡献 +1.44）。
+
+## 踩坑（M3）：xgboost 3.2.0 移除 save_raw（1.x API）→ save_model
+
+**坑**：计划文档写 `model.save_raw().decode()` 保存模型（沿用电商项目旧代码），实现时第一步就 AttributeError——xgboost 3.2.0 没有 save_raw。
+
+**根因**：save_raw 是 xgboost 1.x 的 API（返回原始字节缓冲），3.x 已移除；模型持久化统一走 `save_model` / `load_model`。
+
+**修复**：`scripts/train_model.py` 改 `model.save_model(str(ROOT / "data" / "churn_model.json"))`，加载端 `XGBClassifier().load_model(bytearray(...))` 不变（load_model 同时接受 str 路径与 bytearray）；重训产物字节级确定（random_state=42 + 相同数据，git diff 为空）。
+
+**面试话术**：与 chroma 1.0 移除 CustomEmbeddingFunction、DuckDB 1.5.x 无 SET timeout 同源——AI 工程依赖迭代快，版本能力边界要实测不靠记忆，计划文档写的 API 实现时也要验证。
+
+---
+
+# M3 面试沉淀（衔接）
+
+M3 文档化产物：`docs/interview/01-项目介绍.md`（演示叙事段）、`docs/interview/05-简历项目描述.md`（简历文案终稿）、README 演示小节。原理问答（03）与踩坑记录（04）按需增量补充。
