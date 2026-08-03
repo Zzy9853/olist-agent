@@ -168,8 +168,8 @@ def _attribution(state: State) -> State:
     try:
         result = explain_user(state["uid"])
     except Exception as e:
-        result = None
-        state["error"] = f"归因失败: {e}"
+        state["answer"] = f"归因失败：{e}"
+        return state
     if result is None:
         state["answer"] = f"未找到用户 {state['uid']}，请确认用户 ID 正确。"
     else:
