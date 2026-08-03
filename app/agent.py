@@ -16,8 +16,11 @@ from app.rag import KnowledgeStore
 from app.validator import validate_sql
 
 GEN_PROMPT = """根据上下文生成 DuckDB SQL 回答用户问题。
-输出 JSON：{{"sql": "生成的SQL", "reasoning": "一句思路说明"}}。
-注意：如果问题无法用 SQL 回答（与数据无关/超范围），输出 {{"sql": null, "reasoning": "说明原因"}}。
+输出 JSON：{{"intent": "query"|"explain"|"unsupported", "sql": "生成的SQL", "reasoning": "一句思路说明", "uid": "用户ID或null"}}。
+intent 判定：
+- query：常规取数/分析问题（sql 必填）
+- explain：用户流失归因解释类问题（如"为什么这个用户流失风险高"），此时需从问题中提取 32 位十六进制用户 ID 填入 uid，sql 可为 null
+- unsupported：与数据无关/无法用 SQL 回答（sql 为 null，reasoning 说明原因）
 """
 
 EXPLAIN_PROMPT = """查询结果如下（最多 {n} 行）：
@@ -37,6 +40,9 @@ class State(TypedDict):
     answer: str               # 最终回答
     error: str | None
     rag_context: str          # RAG 检索补充上下文（可空，retrieve 节点填充）
+    intent: str               # query | explain | unsupported（gen_sql 节点判定）
+    uid: str | None           # 归因目标用户 ID（explain 路径填充）
+    attribution: dict | None  # 归因结果（attribution 节点填充）
 
 
 _STORE: KnowledgeStore | None = None
@@ -92,6 +98,24 @@ def _gen_sql(state: State) -> State:
         state["sql"] = None
         state["error"] = f"LLM 调用失败: {e}"
         return state
+    intent = out.get("intent", "query")  # 旧格式兼容：默认 query
+    state["intent"] = intent
+    if intent == "explain":
+        uid = out.get("uid")
+        if uid:
+            state["uid"] = uid
+            state["sql"] = None  # 归因不走 SQL
+            state["error"] = None
+        else:
+            state["intent"] = "unsupported"
+            state["sql"] = None
+            state["error"] = "归因问题需要用户 ID，请提供（32 位十六进制）"
+        return state
+    if intent == "unsupported":
+        state["sql"] = None
+        state["error"] = out.get("reasoning", "LLM 判定该问题无法回答")
+        return state
+    # query：现有 SQL 生成/校验逻辑保持不变
     if out.get("sql"):
         ok, fixed = validate_sql(out["sql"])
         if ok:
@@ -107,6 +131,10 @@ def _gen_sql(state: State) -> State:
 
 
 def _route_sql(state: State) -> str:
+    if state.get("intent") == "explain":
+        return "attribution"
+    if state.get("intent") == "unsupported":
+        return "clarify"
     if state["sql"] is not None:
         return "execute"
     if state.get("attempts", 0) < MAX_RETRY:
@@ -135,6 +163,23 @@ def _explain(state: State) -> State:
     return state
 
 
+def _attribution(state: State) -> State:
+    from app.attribution import explain_user
+    try:
+        result = explain_user(state["uid"])
+    except Exception as e:
+        result = None
+        state["error"] = f"归因失败: {e}"
+    if result is None:
+        state["answer"] = f"未找到用户 {state['uid']}，请确认用户 ID 正确。"
+    else:
+        state["attribution"] = result
+        state["answer"] = chat(
+            [{"role": "system", "content": "你是严谨的数据分析师，解读必须基于给出的归因数据。"},
+             {"role": "user", "content": f"用户问题：{state['question']}\n\n归因数据：{result['summary']}\n\n请用 2-3 句中文解读该用户的流失风险与主要驱动因素。"}])
+    return state
+
+
 def _clarify(state: State) -> State:
     state["answer"] = f"这个问题我需要澄清一下：{state.get('error', '')}。请换一种问法，或提供更多信息。"
     return state
@@ -146,13 +191,16 @@ def build_graph():
     g.add_node("gen_sql", _gen_sql)
     g.add_node("execute", _execute)
     g.add_node("explain", _explain)
+    g.add_node("attribution", _attribution)
     g.add_node("clarify", _clarify)
     g.add_edge(START, "retrieve")
     g.add_edge("retrieve", "gen_sql")
     g.add_conditional_edges("gen_sql", _route_sql,
-                            {"execute": "execute", "retry": "gen_sql", "clarify": "clarify"})
+                            {"execute": "execute", "retry": "gen_sql", "clarify": "clarify",
+                             "attribution": "attribution"})
     g.add_edge("execute", "explain")
     g.add_edge("explain", END)
+    g.add_edge("attribution", END)
     g.add_edge("clarify", END)
     return g.compile()
 
@@ -161,7 +209,7 @@ GRAPH = build_graph()
 
 
 def ask(question: str, messages: list[dict] | None = None) -> dict:
-    """入口：传入问题与可选历史消息，返回 {'answer': str, 'sql': str|None}。"""
+    """入口：传入问题与可选历史消息，返回 {'answer', 'sql', 'intent', 'attribution'}。"""
     init: State = {
         "question": question,
         "messages": messages or [],
@@ -172,6 +220,10 @@ def ask(question: str, messages: list[dict] | None = None) -> dict:
         "answer": "",
         "error": None,
         "rag_context": "",
+        "intent": "query",
+        "uid": None,
+        "attribution": None,
     }
     out = GRAPH.invoke(init)
-    return {"answer": out.get("answer", ""), "sql": out.get("sql")}
+    return {"answer": out.get("answer", ""), "sql": out.get("sql"),
+            "intent": out.get("intent"), "attribution": out.get("attribution")}
