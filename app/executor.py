@@ -22,9 +22,6 @@ def execute_sql(sql: str) -> tuple[bool, pd.DataFrame | str]:
         if len(df) > MAX_ROWS:
             df = df.head(MAX_ROWS)
         return True, df
-        if len(df) > MAX_ROWS:
-            df = df.head(MAX_ROWS)
-        return True, df
     except Exception as e:
         return False, f"执行失败: {e}"
     finally:
