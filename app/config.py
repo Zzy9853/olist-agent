@@ -13,7 +13,8 @@ def load_api_key() -> str:
     if not key and ENV_PATH.exists():
         for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
             if line.startswith("DASHSCOPE_API_KEY="):
-                key = line.split("=", 1)[1].strip()
+                # 兼容裸值/引号包裹/export 前缀三种常见格式
+                key = line.split("=", 1)[1].strip().strip('"').strip("'")
                 break
     if not key:
         raise RuntimeError("DASHSCOPE_API_KEY 未配置（.env 或环境变量）")
