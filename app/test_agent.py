@@ -30,3 +30,18 @@ def run():
 
 if __name__ == "__main__":
     run()
+
+
+def multi_turn():
+    """多轮验证：第二轮追问引用第一轮上下文（如"那圣保罗呢"）。"""
+    from app.agent import ask
+    r1 = ask("哪些州的用户流失率最高？列出前3。")
+    print("第一轮:", r1["answer"][:60])
+    history = [{"role": "user", "content": "哪些州的用户流失率最高？列出前3。"},
+               {"role": "assistant", "content": r1["answer"]}]
+    r2 = ask("那圣保罗的流失率具体是多少？", messages=history)
+    print("第二轮:", r2["answer"][:80])
+    print("第二轮 SQL:", r2["sql"])
+    assert r2["sql"] is not None, "第二轮未生成 SQL"
+    assert "圣保罗" in r2["answer"] or "SP" in r2["answer"], "第二轮未答出圣保罗"
+    print("多轮验证通过")
