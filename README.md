@@ -69,4 +69,4 @@ python -m streamlit run app/ui.py
 ## 环境
 
 - Python 3.14 + duckdb 1.5.3（M2/M3 需安装：sqlglot、langgraph、langchain、chromadb、openai/dashscope、streamlit、xgboost、shap）
-- LLM：阿里云百炼 API（DeepSeek-V4 / Qwen3-Plus）
+- LLM：阿里云百炼 API（DeepSeek-V4 / qwen3.7-plus）
