@@ -18,8 +18,8 @@
 - [x] **M1 数据层**（2026-08-03）：olist.db（9 原始表 + user_wide 95,106×32 + ab_test_results），只读连接验证通过
 - [x] M1 知识库：`knowledge/schema.md`（数据字典）+ `knowledge/metrics.md`（指标口径 + 7 条 SQL 模板，全部验证可执行）
 - [x] **M2 核心链路**（2026-08-03）：LangGraph 状态图（六节点 + 重试/澄清）+ sqlglot AST 校验（14/14 用例）+ 20 问评测集 **EX 95%**（两轮迭代 65% → 95%）+ 安全四道闸（AST 类型 / 12 表白名单 / 自动 LIMIT 200 / 5s 超时）+ RAG 架构预留（ChromaDB 16 块 + qwen embedding，EX 持平）——架构决策见 `docs/adr/2026-08-03-m2-nl2sql-architecture.md`
-- [x] **双轨评测体系**（2026-08-04）：EX 客观执行对比（20 问 95%）+ LLM-as-a-Judge 主观质量评分（Rubrics 三维度：正确性/完整性/洞察，平均 5.0/4.9/4.7）+ 双轨对比分析——发现"内部自洽但错误的回答可骗过无参考 Judge"，主观评分不能替代客观执行验证（面试素材见 `docs/interview/03-原理问答.md` 主题四 Q5/Q6，决策与数据见 `eval/iter_log.md`）
-- [x] **M3 产品化**（2026-08-03）：Streamlit 聊天 UI（`python -m streamlit run app/ui.py`）+ intent 分类（query/explain/unsupported 路由）+ SHAP 归因（TreeExplainer 用户 Top 特征贡献）+ 多轮会话记忆（messages 注入，追问"那圣保罗呢"→SP 流失率 79.22%）；流失模型重训 **PR-AUC 0.9722** —— 面试素材见 `docs/interview/`，决策与踩坑见 `eval/iter_log.md` M3 小节
+- [x] **双轨评测体系**（2026-08-04）：EX 客观执行对比（20 问 95%）+ LLM-as-a-Judge 主观质量评分（Rubrics 三维度：正确性/完整性/洞察，平均 5.0/4.9/4.7）+ 双轨对比分析——发现"内部自洽但错误的回答可骗过无参考 Judge"，主观评分不能替代客观执行验证（决策与数据见 `eval/iter_log.md`（双轨对比））
+- [x] **M3 产品化**（2026-08-03）：Streamlit 聊天 UI（`python -m streamlit run app/ui.py`）+ intent 分类（query/explain/unsupported 路由）+ SHAP 归因（TreeExplainer 用户 Top 特征贡献）+ 多轮会话记忆（messages 注入，追问"那圣保罗呢"→SP 流失率 79.22%）；流失模型重训 **PR-AUC 0.9722** —— 决策与踩坑见 `eval/iter_log.md` M3 小节
 
 ## MCP Server（AI 客户端可调用的标准工具）
 
@@ -38,10 +38,19 @@ python -m app.mcp_server        # stdio 传输启动
 
 **设计要点**：不暴露裸 SQL 执行——所有查询仍走四道闸 + 只读，MCP 是安全边界外的标准入口。
 
+## 数据准备
+
+本仓库不含原始数据。需要 [Olist 巴西电商数据集](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)（9 张 CSV）与特征宽表（`olist_user_wide_table.csv`、`ab_test_results.csv`），然后在项目 `.env` 配置：
+
+```
+DASHSCOPE_API_KEY=<阿里云百炼 API Key>
+OLIST_DATA_DIR=<Olist 原始 CSV 目录>
+```
+
 ## 使用
 
 ```bash
-# 重建数据库（从电商项目 CSV 重新加载）
+# 重建数据库（从配置的数据目录重新加载）
 python scripts/prepare_db.py
 
 # 只读查询示例
@@ -54,7 +63,7 @@ python -c "import duckdb; con = duckdb.connect('data/olist.db', read_only=True);
 python -m streamlit run app/ui.py
 ```
 
-三步话术（面试边演示边讲，详细脚本见 `docs/interview/01-项目介绍.md` 演示叙事段）：
+三步话术（面试边演示边讲）：
 
 1. **查数**："整体用户流失率是多少？"（intent=query → SQL → 图表，答 81.20%）；"物流延迟率最高的 5 个品类有哪些？"（Top 5 柱状图——图表模板化，LLM 不生成绘图代码）；
 2. **归因**："为什么这个用户流失风险高？用户 ID 是 97981245c3257ea9b14befffd560177b"（intent=explain → SHAP 归因卡片：概率 66.7%，avg_delivery_days 贡献 +1.44）；
