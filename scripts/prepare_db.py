@@ -2,14 +2,40 @@
 
 从电商项目 CSV 加载 9 张原始表 + 用户宽表到 olist.db，
 显式定义列类型，保证 Agent 生成的 SQL 拿到确定性的 schema。
+
+数据路径从 .env 的 OLIST_DATA_DIR 读取（不硬编码，保证仓库可移植）。
 """
 import os
+from pathlib import Path
+
 import duckdb
 
-OLIST_DATA = r"C:\Users\10936\Desktop\电商\olist_data"
-WIDE_CSV = r"C:\Users\10936\Desktop\电商\olist_analysis\data\olist_user_wide_table.csv"
-AB_CSV = r"C:\Users\10936\Desktop\电商\olist_analysis\data\ab_test_results.csv"
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "olist.db")
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def _load_env() -> dict:
+    env = {}
+    env_path = ROOT / ".env"
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and "=" in line and not line.startswith("#"):
+                k, v = line.split("=", 1)
+                env[k.strip()] = v.strip().strip('"').strip("'")
+    return env
+
+
+_ENV = _load_env()
+OLIST_DATA_DIR = _ENV.get("OLIST_DATA_DIR") or os.environ.get("OLIST_DATA_DIR")
+if not OLIST_DATA_DIR:
+    raise RuntimeError(
+        "缺少数据目录配置：请在项目 .env 中设置 OLIST_DATA_DIR（Olist 原始 CSV 目录），"
+        "例如 OLIST_DATA_DIR=C:/path/to/olist_data；宽表与 AB 表默认从 {OLIST_DATA_DIR}/../olist_analysis/data/ 读取。")
+
+OLIST_DATA = OLIST_DATA_DIR
+WIDE_CSV = os.path.join(os.path.dirname(OLIST_DATA), "olist_analysis", "data", "olist_user_wide_table.csv")
+AB_CSV = os.path.join(os.path.dirname(OLIST_DATA), "olist_analysis", "data", "ab_test_results.csv")
+DB_PATH = ROOT / "data" / "olist.db"
 
 def csv(name):
     return os.path.join(OLIST_DATA, name).replace("\\", "/")
