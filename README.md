@@ -20,6 +20,23 @@
 - [x] **M2 核心链路**（2026-08-03）：LangGraph 状态图（六节点 + 重试/澄清）+ sqlglot AST 校验（14/14 用例）+ 20 问评测集 **EX 95%**（两轮迭代 65% → 95%）+ 安全四道闸（AST 类型 / 12 表白名单 / 自动 LIMIT 200 / 5s 超时）+ RAG 架构预留（ChromaDB 16 块 + qwen embedding，EX 持平）——架构决策见 `docs/adr/2026-08-03-m2-nl2sql-architecture.md`
 - [x] **M3 产品化**（2026-08-03）：Streamlit 聊天 UI（`python -m streamlit run app/ui.py`）+ intent 分类（query/explain/unsupported 路由）+ SHAP 归因（TreeExplainer 用户 Top 特征贡献）+ 多轮会话记忆（messages 注入，追问"那圣保罗呢"→SP 流失率 79.22%）；流失模型重训 **PR-AUC 0.9722** —— 面试素材见 `docs/interview/`，决策与踩坑见 `eval/iter_log.md` M3 小节
 
+## MCP Server（AI 客户端可调用的标准工具）
+
+把 Agent 能力标准化为 MCP 工具，任何支持 MCP 的客户端（Claude Desktop / Claude Code / Cursor）可直接调用：
+
+```bash
+python -m app.mcp_server        # stdio 传输启动
+```
+
+| 工具 | 能力 |
+|------|------|
+| ask_data | 自然语言问数（完整 Agent 链路，安全校验内置） |
+| explain_user | 用户流失归因（SHAP Top 特征） |
+| list_tables | 数据表清单（能力发现） |
+| validate_sql | SQL 安全校验（AST+白名单） |
+
+**设计要点**：不暴露裸 SQL 执行——所有查询仍走四道闸 + 只读，MCP 是安全边界外的标准入口。
+
 ## 使用
 
 ```bash
