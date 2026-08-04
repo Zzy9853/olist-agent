@@ -125,3 +125,15 @@ M3 文档化产物：`docs/interview/01-项目介绍.md`（演示叙事段）、
 2. **numpy float32 JSON 序列化崩溃**：`round(np.float32, 4)` 仍返回 float32 → MCP 层 json.dumps 抛 TypeError。修复 `round(float(s), 4)`（numpy 2.x 收紧）。教训：模型层输出要做类型卫生（显式 float()），边界序列化才稳。
 
 **验证**：4 工具注册 + 真实调用集成测试全过（ask_data 真实 LLM 问数、explain_user 真实 SHAP、validate_sql 拦截 DROP、list_tables 12 表）。
+
+---
+
+## LLM-as-a-Judge 双轨评测（2026-08-04）
+
+**实现**：app/judge.py——Judge LLM（qwen3.7-plus）按 Rubrics 三维度（正确性/完整性/洞察，1-5 分）无参考评估问答对；eval/judge_eval.py 批量 20 问 + EX 双轨对比。
+
+**结果**：EX 95%（20 问）；Judge 平均 correctness 5.00 / completeness 4.90 / insight 4.70；区分度自检 5/5/5 vs 1/1/1（两次运行一致）。
+
+**关键发现（反预期，最有价值的面试素材）**：EX 失败组（Q18，n=1）Judge 总分 15.00 反而高于通过组 14.58——Q18 回答内部自洽（数字加总、占比、洞察俱全）但执行结果与参考不一致，无参考 Judge 被"自洽的错误"骗过给满分。**结论：主观评分不能替代客观执行验证，双轨互补才是完整评测**。通过组内部仍有区分度（Q07 completeness=3 未列全 Top10），排除无脑满分。
+
+**决策**：Judge 低温度（0.0）+ json_object 结构化输出保证评分稳定（两次运行完全一致）；Rubrics 每维度带 1/3/5 锚点定义提升可操作性。
