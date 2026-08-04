@@ -1,0 +1,32 @@
+
+=== 双轨评测结果 ===
+ id    ex  correctness  completeness  insight
+Q01  True            5             5        5
+Q02  True            5             5        3
+Q03  True            5             5        5
+Q04  True            5             5        4
+Q05  True            5             5        5
+Q06  True            5             5        5
+Q07  True            5             3        5
+Q08  True            5             5        4
+Q09  True            5             5        4
+Q10  True            5             5        5
+Q11  True            5             5        4
+Q12  True            5             5        5
+Q13  True            5             5        5
+Q14  True            5             5        5
+Q15  True            5             5        5
+Q16  True            5             5        5
+Q17  True            5             5        5
+Q18 False            5             5        5
+Q19  True            5             5        5
+Q20  True            5             5        5
+
+EX 通过率: 95%
+Judge 平均分: correctness 5.00 / completeness 4.90 / insight 4.70
+
+EX 通过组 Judge 总分均值: 14.58
+EX 失败组 Judge 总分均值: 15.00
+（预期：通过组显著高于失败组——Judge 与 EX 一致性验证）
+
+结果已保存 eval/judge_results.csv
