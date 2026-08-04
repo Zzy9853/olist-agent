@@ -46,7 +46,7 @@ def explain_user(uid: str, top_k: int = 3) -> dict | None:
     sv = explainer.shap_values(X)[0]
     contrib = sorted(zip(feats, X.iloc[0].tolist(), sv),
                      key=lambda t: abs(t[2]), reverse=True)
-    top = [{"feature": f, "value": round(v, 2), "shap": round(s, 4)}
+    top = [{"feature": f, "value": round(v, 2), "shap": round(float(s), 4)}
            for f, v, s in contrib[:top_k]]
     summary = f"该用户流失概率 {prob:.1%}。主要驱动因素：" + \
               "，".join(f"{f}（贡献 {s:+.2f}）" for f, v, s in contrib[:top_k])

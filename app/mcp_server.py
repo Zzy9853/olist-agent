@@ -9,9 +9,9 @@ import duckdb
 from mcp.server.fastmcp import FastMCP
 
 from app.agent import ask
-from app.attribution import explain_user
+from app.attribution import explain_user as _explain_user
 from app.config import DB_PATH
-from app.validator import validate_sql
+from app.validator import validate_sql as _validate_sql
 
 mcp = FastMCP("olist-agent")
 
@@ -33,7 +33,7 @@ def explain_user(uid: str) -> str:
     """解释指定用户（32 位十六进制 customer_unique_id）的流失风险归因。
     返回 JSON：{"uid", "churn_prob", "features": [{"feature","value","shap"}], "summary"}。
     """
-    r = explain_user(uid)
+    r = _explain_user(uid)
     return json.dumps(r, ensure_ascii=False) if r else json.dumps({"error": "用户不存在"}, ensure_ascii=False)
 
 
@@ -50,7 +50,7 @@ def list_tables() -> str:
 @mcp.tool()
 def validate_sql(sql: str) -> str:
     """SQL 安全校验（AST 类型 + 表白名单 + LIMIT 兜底）。返回 JSON：{"ok": bool, "message": str}。"""
-    ok, msg = validate_sql(sql)
+    ok, msg = _validate_sql(sql)
     return json.dumps({"ok": ok, "message": msg}, ensure_ascii=False)
 
 
