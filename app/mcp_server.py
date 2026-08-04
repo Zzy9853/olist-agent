@@ -39,7 +39,7 @@ def explain_user(uid: str) -> str:
 
 @mcp.tool()
 def list_tables() -> str:
-    """列出可查询的数据表清单（表名 + 行数）。用于能力发现。"""
+    """列出可查询的数据表清单（表名）。用于能力发现。"""
     con = duckdb.connect(str(DB_PATH), read_only=True)
     rows = con.execute(
         "SELECT table_name FROM information_schema.tables WHERE table_schema='main' ORDER BY table_name").fetchall()
