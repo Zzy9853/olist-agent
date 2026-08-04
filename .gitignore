@@ -3,3 +3,4 @@ data/olist.db
 data/chroma/
 __pycache__/
 *.pyc
+docs/interview/
