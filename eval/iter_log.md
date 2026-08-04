@@ -111,3 +111,17 @@ Q18（支付方式订单量分布）两次失败形态不同：T7 是带 valid_o
 # M3 面试沉淀（衔接）
 
 M3 文档化产物：`docs/interview/01-项目介绍.md`（演示叙事段）、`docs/interview/05-简历项目描述.md`（简历文案终稿）、README 演示小节。原理问答（03）与踩坑记录（04）按需增量补充。
+
+---
+
+## MCP 封装（2026-08-03）
+
+**决策**：用官方 mcp SDK（1.27.0）FastMCP 把 Agent 能力封装为标准工具（ask_data/explain_user/list_tables/validate_sql），stdio 传输。
+
+**工具切分逻辑**：按"能力域"而非函数切——ask_data 是完整链路入口（内部走四道闸+只读），list_tables 支持能力发现，validate_sql 可单独复用；**不暴露裸 SQL 执行**（MCP 是安全边界外的标准入口）。
+
+**踩坑（面试素材）**：
+1. **工具名遮蔽同名导入**：`from app.attribution import explain_user` + `@mcp.tool() def explain_user` → 函数体内调用自身无限递归（RecursionError）。修复：导入别名 `_explain_user`（commit cf3cba0）。教训：Python 模块级名字绑定，def 重绑定导入名。
+2. **numpy float32 JSON 序列化崩溃**：`round(np.float32, 4)` 仍返回 float32 → MCP 层 json.dumps 抛 TypeError。修复 `round(float(s), 4)`（numpy 2.x 收紧）。教训：模型层输出要做类型卫生（显式 float()），边界序列化才稳。
+
+**验证**：4 工具注册 + 真实调用集成测试全过（ask_data 真实 LLM 问数、explain_user 真实 SHAP、validate_sql 拦截 DROP、list_tables 12 表）。
