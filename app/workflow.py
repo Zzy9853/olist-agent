@@ -40,7 +40,7 @@ def run_churn_diagnosis() -> dict:
     for _, row in df.iterrows():
         tag = "流失" if row["is_churned"] == 1 else "留存"
         detail.append(f"{tag}: 配送 {row['avg_delivery_days']}天/延迟率 {row['delay_rate']:.1%}/"
-                      f"差评率 {row['low_score_rate']:.1%}/均消 R${row['avg_revenue']:.0f}")
+                      f"差评率 {row['low_score_rate']:.1%}/均消 R\\${row['avg_revenue']:.0f}")
     steps.append({"name": "对比", "detail": "；".join(detail)})
 
     # ③ 归因（整体 Top 特征）

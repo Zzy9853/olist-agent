@@ -17,6 +17,11 @@ if "messages" not in st.session_state:
     st.session_state.messages = []  # [{"role": "user"/"assistant", "content": ..., "sql":..., "attribution":...}]
 
 
+def _safe_md(text: str) -> str:
+    """转义裸美元符号，防止 Markdown 数学公式渲染（如 R$142 中的 $ 触发 KaTeX）。"""
+    return text.replace("$", "\\$")
+
+
 def render_chart(result_df: pd.DataFrame | None):
     """预置图表模板：日期列→折线；Top N→横向柱状；其余数值→柱状。"""
     if result_df is None or result_df.empty:
@@ -42,7 +47,7 @@ def main():
 
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+            st.markdown(_safe_md(msg["content"]))
             if msg.get("sql"):
                 with st.expander("生成的 SQL"):
                     st.code(msg["sql"], language="sql")
@@ -60,7 +65,7 @@ def main():
         with st.chat_message("assistant"):
             with st.spinner("执行流失诊断工作流…"):
                 r = ask("运行流失诊断")
-            st.markdown(r["answer"])
+            st.markdown(_safe_md(r["answer"]))
         st.session_state.messages.append({"role": "assistant", "content": r["answer"],
                                           "sql": None, "attribution": None})
 
@@ -74,7 +79,7 @@ def main():
         with st.chat_message("assistant"):
             with st.spinner("分析中…"):
                 r = ask(prompt, messages=history)
-            st.markdown(r["answer"])
+            st.markdown(_safe_md(r["answer"]))
             if r.get("sql"):
                 with st.expander("生成的 SQL"):
                     st.code(r["sql"], language="sql")
