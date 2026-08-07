@@ -1,0 +1,9 @@
+
+EX = 20/22 = 91%
+
+❌ Q17: 结果不一致
+  gen=WITH monthly_orders AS (SELECT DATE_TRUNC('MONTH', order_purchase_timestamp) AS order_month, COUNT(*) AS order_count FROM valid_orders WHERE order_purchase_timestamp >= CAST('2018-01-01' AS DATE) 
+
+❌ Q18: 结果不一致
+  gen=SELECT payment_type, COUNT(DISTINCT order_id) AS order_count FROM order_payments GROUP BY payment_type ORDER BY order_count DESC LIMIT 200
+ref=SELECT payment_type, COUNT(DISTINCT order_id) AS cnt 
