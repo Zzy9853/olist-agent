@@ -107,6 +107,7 @@ def main():
         if st.button("＋ 新会话", use_container_width=True):
             cid, _ = new_conversation(st.session_state.conversations)
             st.session_state.current_id = cid
+            st.session_state.conv_radio = cid  # 同步 radio widget state（防旧选中值弹回）
             save_conversations(st.session_state.conversations)
             st.rerun()
         convs = st.session_state.conversations
@@ -114,7 +115,8 @@ def main():
         if convs:
             selected = st.radio("历史会话", list(titles.keys()),
                                 format_func=lambda cid: titles[cid],
-                                label_visibility="collapsed")
+                                label_visibility="collapsed",
+                                key="conv_radio")
             if selected != st.session_state.current_id:
                 st.session_state.current_id = selected
                 st.rerun()
@@ -123,6 +125,7 @@ def main():
                 if not st.session_state.conversations:
                     new_conversation(st.session_state.conversations)
                 st.session_state.current_id = next(iter(st.session_state.conversations))
+                st.session_state.conv_radio = st.session_state.current_id
                 save_conversations(st.session_state.conversations)
                 st.rerun()
         st.markdown("---")
