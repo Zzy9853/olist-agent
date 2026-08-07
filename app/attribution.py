@@ -52,3 +52,17 @@ def explain_user(uid: str, top_k: int = 3) -> dict | None:
               "，".join(f"{f}（贡献 {s:+.2f}）" for f, v, s in contrib[:top_k])
     return {"uid": uid, "churn_prob": round(prob, 4),
             "features": top, "summary": summary}
+
+
+def explain_overall(top_k: int = 3, sample_size: int = 5000) -> list[dict]:
+    """整体流失归因：采样用户 SHAP 均值贡献 Top_k。返回 [{"feature", "mean_shap"}]。"""
+    model, explainer, feats = _load()
+    con = duckdb.connect(str(DB_PATH), read_only=True)
+    df = con.execute(
+        f"SELECT {', '.join(feats)} FROM user_wide USING SAMPLE {sample_size} ROWS").df()
+    con.close()
+    X = df[feats].astype(float).fillna(0)
+    sv = explainer.shap_values(X)
+    mean_shap = abs(sv).mean(axis=0)
+    ranked = sorted(zip(feats, mean_shap), key=lambda t: t[1], reverse=True)
+    return [{"feature": f, "mean_shap": round(float(v), 4)} for f, v in ranked[:top_k]]
