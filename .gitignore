@@ -5,3 +5,4 @@ __pycache__/
 *.pyc
 docs/interview/
 docs/superpowers/
+data/conversations.json
