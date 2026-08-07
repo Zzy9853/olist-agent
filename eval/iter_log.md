@@ -147,3 +147,17 @@ M3 文档化产物：`docs/notes/01-项目概览.md`（演示叙事段）、`doc
 **可复现性**：explain_overall 用 `USING SAMPLE reservoir(5000 ROWS) REPEATABLE(42)`——同 seed 完全确定（reviewer 实测修复前均值漂移 1-5%）。
 **踩坑（工程教训）**：Streamlit 按钮触发双渲染——消费块位置在渲染循环前导致当轮消息渲染两遍（AppTest 实测）；修复：消费块移至渲染循环后（commit 4b8167d）。教训：Streamlit 每交互 rerun 全脚本，消息渲染位置必须与输入分支对称。
 **结果**：21 问评测 EX 20/21 = 95%（Q21 通过，Q18 历史采样波动）；冒烟 5/5；工作流四步真实数据（81.2%/8.4 vs 13.2 天/Top3 SHAP/3 条建议）。
+
+---
+
+## 验收修复（2026-08-07）
+
+**修复 1（防幻觉，最重要）**：用户实测"流失率的特征重要性排名"→ LLM 生成 SQL 硬编码虚构数值（`SELECT ... 0.168 AS importance UNION ALL ...` 32 行，前几名抄知识库基线、其余全编造）。根因：特征重要性是模型内知识（feature_importances_/SHAP），数据库事实空间不存在——LLM 走 SQL 链路必然虚构。**架构级解法**：intent=explain 扩展为 uid=null 合法（整体归因），`_attribution` 节点 uid=None 调 explain_overall(top_k=5)；metrics.md 加硬规则第 11 条（禁止 SQL 查询/硬编码特征重要性）；评测集加 Q22 结构断言防回归。教训：**防幻觉靠"路由边界"而非 prompt 约束**——模型内知识的问题从 Text2SQL 链路整体切走，比"不要编造"可靠。
+
+**修复 2（emoji CSS）**：标题渐变样式 `-webkit-text-fill-color: transparent` 使 emoji 不可见（彩色字体不受 text-clip 影响，需选中才显示）→ 改品牌蓝纯色。
+
+**修复 3（会话懒创建）**：点"新会话"原行为立即创建空会话（历史列表堆空会话）→ 草稿态（current_id=None 显示欢迎页），提问后才 new_conversation；radio 用 index=None 允许无选中。
+
+**修复 4（radio widget state）**：radio 无显式 key 时保留旧选中值，点"新会话"后 current_id 被弹回旧会话 → radio 加 key="conv_radio"，按钮分支同步 widget state（commit 290210f）。教训：Streamlit widget state 跨 rerun 持久化，代码赋值需显式同步。
+
+**评测**：21 → 22 问（Q22 模型解释结构断言）。
