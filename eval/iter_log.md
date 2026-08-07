@@ -1,6 +1,6 @@
 # M2 评测迭代日志（数据飞轮记录）
 
-> 面试叙事素材：每次评测失败 → 归类根因 → 修复 → 复测，这就是"评测驱动的数据飞轮"。
+> 工程叙事：每次评测失败 → 归类根因 → 修复 → 复测，这就是"评测驱动的数据飞轮"。
 
 ## 基线（2026-08-03，第一轮全量）
 
@@ -35,7 +35,7 @@
 
 **EX = 19/20 = 95%**（2026-08-03 第二轮全量）。唯一剩余失败 Q18 已通过更新参考 SQL 修正（LLM 行为本身正确）。
 
-## 教训（面试素材）
+## 教训
 
 1. **EX 对比规则设计是评测的灵魂**：列名严格对比会系统性误报——"值等价匹配"（列名/列序/行序自由 + 容差）更贴近业务正确性语义
 2. **LLM 有时比参考 SQL 更严谨**：COUNT(DISTINCT)、无效订单过滤都是 LLM 主动做的——评测集需要持续维护（LLM 更对就更新参考）
@@ -58,7 +58,7 @@ Q18（支付方式订单量分布）两次失败形态不同：T7 是带 valid_o
 
 **结论：持平，不回退开关**。知识库仅 ~16KB/16 块，全量注入已覆盖全部信息，RAG top-k 是冗余增量——无增益（EX 不变）也无干扰（未破坏任何已过题）。RAG_ENABLED=True 保留：这是**为可扩展性做的架构预留**——文档量增长后，全量注入的 token 成本线性增长，按问题检索 top-k 注入则成本与文档量解耦（检索→注入路径已通，届时只换切块粒度/检索策略）。
 
-**踩坑（面试素材）**：chroma 1.0 移除 `CustomEmbeddingFunction` → 改为 `EmbeddingFunction` 协议 + `register_embedding_function` 注册（name() 作 config key 持久化，跨进程加载按 build_from_config 重建）；不注册则磁盘集合在新进程加载报 "Unsupported embedding function"。
+**踩坑（工程教训）**：chroma 1.0 移除 `CustomEmbeddingFunction` → 改为 `EmbeddingFunction` 协议 + `register_embedding_function` 注册（name() 作 config key 持久化，跨进程加载按 build_from_config 重建）；不注册则磁盘集合在新进程加载报 "Unsupported embedding function"。
 
 ---
 
@@ -104,13 +104,13 @@ Q18（支付方式订单量分布）两次失败形态不同：T7 是带 valid_o
 
 **修复**：`scripts/train_model.py` 改 `model.save_model(str(ROOT / "data" / "churn_model.json"))`，加载端 `XGBClassifier().load_model(bytearray(...))` 不变（load_model 同时接受 str 路径与 bytearray）；重训产物字节级确定（random_state=42 + 相同数据，git diff 为空）。
 
-**面试话术**：与 chroma 1.0 移除 CustomEmbeddingFunction、DuckDB 1.5.x 无 SET timeout 同源——AI 工程依赖迭代快，版本能力边界要实测不靠记忆，计划文档写的 API 实现时也要验证。
+**教训总结**：与 chroma 1.0 移除 CustomEmbeddingFunction、DuckDB 1.5.x 无 SET timeout 同源——AI 工程依赖迭代快，版本能力边界要实测不靠记忆，计划文档写的 API 实现时也要验证。
 
 ---
 
-# M3 面试沉淀（衔接）
+# M3 文档沉淀（衔接）
 
-M3 文档化产物：`docs/interview/01-项目介绍.md`（演示叙事段）、`docs/interview/05-简历项目描述.md`（简历文案终稿）、README 演示小节。原理问答（03）与踩坑记录（04）按需增量补充。
+M3 文档化产物：`docs/notes/01-项目概览.md`（演示叙事段）、`docs/notes/05-项目价值与量化.md`（项目描述文案终稿）、README 演示小节。原理问答（03）与踩坑记录（04）按需增量补充。
 
 ---
 
@@ -120,8 +120,8 @@ M3 文档化产物：`docs/interview/01-项目介绍.md`（演示叙事段）、
 
 **工具切分逻辑**：按"能力域"而非函数切——ask_data 是完整链路入口（内部走四道闸+只读），list_tables 支持能力发现，validate_sql 可单独复用；**不暴露裸 SQL 执行**（MCP 是安全边界外的标准入口）。
 
-**踩坑（面试素材）**：
-1. **工具名遮蔽同名导入**：`from app.attribution import explain_user` + `@mcp.tool() def explain_user` → 函数体内调用自身无限递归（RecursionError）。修复：导入别名 `_explain_user`/`_validate_sql`（commit ffdfcd9）。教训：Python 模块级名字绑定，def 重绑定导入名。
+**踩坑（工程教训）**：
+1. **工具名遮蔽同名导入**：`from app.attribution import explain_user` + `@mcp.tool() def explain_user` → 函数体内调用自身无限递归（RecursionError）。修复：导入别名 `_explain_user`/`_validate_sql`（commit 5049567）。教训：Python 模块级名字绑定，def 重绑定导入名。
 2. **numpy float32 JSON 序列化崩溃**：`round(np.float32, 4)` 仍返回 float32 → MCP 层 json.dumps 抛 TypeError。修复 `round(float(s), 4)`（numpy 2.x 收紧）。教训：模型层输出要做类型卫生（显式 float()），边界序列化才稳。
 
 **验证**：4 工具注册 + 真实调用集成测试全过（ask_data 真实 LLM 问数、explain_user 真实 SHAP、validate_sql 拦截 DROP、list_tables 12 表）。
@@ -134,7 +134,7 @@ M3 文档化产物：`docs/interview/01-项目介绍.md`（演示叙事段）、
 
 **结果**：EX 95%（20 问）；Judge 平均 correctness 5.00 / completeness 4.90 / insight 4.70；区分度自检 5/5/5 vs 1/1/1（两次运行一致）。
 
-**关键发现（反预期，最有价值的面试素材）**：EX 失败组（Q18，n=1）Judge 总分 15.00 反而高于通过组 14.58——Q18 回答内部自洽（数字加总、占比、洞察俱全）但执行结果与参考不一致，无参考 Judge 被"自洽的错误"骗过给满分。**结论：主观评分不能替代客观执行验证，双轨互补才是完整评测**。通过组内部仍有区分度（Q07 completeness=3 未列全 Top10），排除无脑满分。
+**关键发现（反预期，最有价值）**：EX 失败组（Q18，n=1）Judge 总分 15.00 反而高于通过组 14.58——Q18 回答内部自洽（数字加总、占比、洞察俱全）但执行结果与参考不一致，无参考 Judge 被"自洽的错误"骗过给满分。**结论：主观评分不能替代客观执行验证，双轨互补才是完整评测**。通过组内部仍有区分度（Q07 completeness=3 未列全 Top10），排除无脑满分。
 
 **决策**：Judge 低温度（0.0）+ json_object 结构化输出保证评分稳定（两次运行完全一致）；Rubrics 每维度带 1/3/5 锚点定义提升可操作性。
 
@@ -145,5 +145,5 @@ M3 文档化产物：`docs/interview/01-项目介绍.md`（演示叙事段）、
 **决策**：intent 分类新增 workflow 值（并入 GEN_PROMPT 的 JSON 输出，同 explain 模式省一次调用）；路由到 workflow 节点 → app/workflow.py 四步模板（概览/对比/归因/建议）。
 **设计**：workflow = 评测集问题的串联执行（①概览=Q01 模板、②对比=Q03 模板）——质量天然被既有评测覆盖；新增 Q21 工作流结构用例（断言四步报告，不走 SQL 对比）。
 **可复现性**：explain_overall 用 `USING SAMPLE reservoir(5000 ROWS) REPEATABLE(42)`——同 seed 完全确定（reviewer 实测修复前均值漂移 1-5%）。
-**踩坑（面试素材）**：Streamlit 按钮触发双渲染——消费块位置在渲染循环前导致当轮消息渲染两遍（AppTest 实测）；修复：消费块移至渲染循环后（commit 42cebbc）。教训：Streamlit 每交互 rerun 全脚本，消息渲染位置必须与输入分支对称。
+**踩坑（工程教训）**：Streamlit 按钮触发双渲染——消费块位置在渲染循环前导致当轮消息渲染两遍（AppTest 实测）；修复：消费块移至渲染循环后（commit 4b8167d）。教训：Streamlit 每交互 rerun 全脚本，消息渲染位置必须与输入分支对称。
 **结果**：21 问评测 EX 20/21 = 95%（Q21 通过，Q18 历史采样波动）；冒烟 5/5；工作流四步真实数据（81.2%/8.4 vs 13.2 天/Top3 SHAP/3 条建议）。
