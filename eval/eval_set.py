@@ -1,6 +1,7 @@
 # eval/eval_set.py
-"""20 问评测集：5 类问题，参考 SQL 已人工验证可执行。
+"""21 问评测集：5 类问题 + 1 工作流用例，参考 SQL 已人工验证可执行。
 EX 判定：生成 SQL 与参考 SQL 执行结果对比（列名归一 + 数值容差 + 行序归一）。
+工作流用例（Q21）：结构断言（四步报告），不走 SQL 对比。
 """
 from app.executor import execute_sql
 
@@ -50,4 +51,8 @@ CASES = [
      "ref": "SELECT ROUND(COUNT(*) * 1.0 / (SELECT COUNT(*) FROM user_wide),4) AS pct FROM user_wide WHERE avg_delivery_days > 15"},
     {"id": "Q20", "q": "各州流失用户的平均消费，列出前5（口径陷阱题：问的是流失用户的消费，不是全部用户）",
      "ref": "SELECT customer_state, AVG(total_revenue) AS avg_rev FROM user_wide WHERE is_churned = 1 GROUP BY customer_state ORDER BY avg_rev DESC LIMIT 5"},
+    # ---- 6. 工作流用例（结构断言） ----
+    {"id": "Q21", "q": "运行流失诊断",
+     "ref": "",  # workflow 用例：结构断言，不走 SQL 对比
+     "wf": True},
 ]

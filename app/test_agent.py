@@ -1,5 +1,5 @@
 # app/test_agent.py
-"""Agent 链路冒烟：3 个查询问题 + 1 个归因问题端到端（需真实 API Key）。"""
+"""Agent 链路冒烟：3 个查询问题 + 1 个归因问题 + 1 个工作流问题端到端（需真实 API Key）。"""
 from app.agent import ask
 
 
@@ -9,10 +9,19 @@ def run():
         "物流延迟率最高的5个品类有哪些？",
         "流失概率高于80%的高价值用户有多少人？",
         "为什么这个用户流失风险高？用户ID是 97981245c3257ea9b14befffd560177b",
+        "运行流失诊断",
     ]
     passed = 0
     for i, q in enumerate(questions):
         r = ask(q)
+        if i == 4:  # workflow 用例
+            ok = (r.get("workflow_result") is not None
+                  and len(r["workflow_result"].get("steps", [])) == 4)
+            passed += ok
+            print(f"Q: {q}")
+            print(f"   intent: {r['intent']}  steps: {[s['name'] for s in r['workflow_result']['steps']] if r.get('workflow_result') else None}")
+            print()
+            continue
         if i == 3:  # 归因问题：走 explain 路径
             ok = (r["intent"] == "explain" and r["attribution"] is not None
                   and len(r["attribution"]["features"]) == 3 and bool(r["answer"]))
