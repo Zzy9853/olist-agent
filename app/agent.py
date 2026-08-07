@@ -10,25 +10,10 @@ from langgraph.graph import StateGraph, START, END
 
 from app.config import MAX_RETRY, RAG_ENABLED
 from app.executor import execute_sql
-from app.knowledge import build_system_prompt
 from app.llm import chat, chat_json
+from app.prompts import EXPLAIN_PROMPT, build_system_prompt
 from app.rag import KnowledgeStore
 from app.validator import validate_sql
-
-GEN_PROMPT = """根据上下文生成 DuckDB SQL 回答用户问题。
-输出 JSON：{{"intent": "query"|"explain"|"unsupported"|"workflow", "sql": "生成的SQL", "reasoning": "一句思路说明", "uid": "用户ID或null"}}。
-intent 判定：
-- query：常规取数/分析问题（sql 必填）
-- explain：模型解释类问题——单用户归因（"为什么这个用户流失风险高"）需提取 32 位十六进制用户 ID 填入 uid；整体特征重要性/特征排名（"哪些特征最重要"/"特征重要性排名"/"流失的驱动因素"）uid 填 null（走整体归因）。sql 可为 null
-- workflow：用户要求运行预置分析工作流（如"运行流失诊断"/"流失诊断"/"跑一次流失分析"），sql/uid 均为 null
-- unsupported：与数据无关/无法用 SQL 回答（sql 为 null，reasoning 说明原因）
-"""
-
-EXPLAIN_PROMPT = """查询结果如下（最多 {n} 行）：
-{result}
-
-请用 2-4 句中文解读：回答用户的问题、指出值得注意的发现。如结果包含比例/指标，对照常见基线判断是否异常（流失率约 81%、留存用户配送 8.4 天 vs 流失 13.2 天等）。不要编造数据。
-"""
 
 
 class State(TypedDict):
@@ -91,7 +76,7 @@ def _gen_sql(state: State) -> State:
         # 路由函数里的修改不会写回状态通道，会导致无限重试）
         state["attempts"] = state.get("attempts", 0) + 1
         retry_info = f"\n上次 SQL 未通过校验，错误：{state['error']}。请修正后重新生成。"
-    content = GEN_PROMPT.format() + retry_info + f"\n用户问题：{state['question']}"
+    content = retry_info + f"\n用户问题：{state['question']}"
     messages = [{"role": "system", "content": state["system_prompt"]}] + state.get("messages", []) + [
         {"role": "user", "content": content}]
     try:
