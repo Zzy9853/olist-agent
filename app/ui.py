@@ -17,8 +17,7 @@ _CSS = """
 <style>
 .stApp { max-width: 1100px; margin: 0 auto; }
 [data-testid="stSidebar"] { background: #f8f9fb; }
-h1 { background: linear-gradient(120deg, #1f6feb, #8250df);
-     -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+h1 { color: #1f6feb; }
 [data-testid="stChatMessage"] { border-radius: 12px; padding: 12px 16px; margin: 8px 0; }
 </style>
 """
