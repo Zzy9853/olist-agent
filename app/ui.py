@@ -58,9 +58,13 @@ def _render_messages(messages: list[dict]):
                     st.code(msg["sql"], language="sql")
             if msg.get("attribution"):
                 a = msg["attribution"]
-                st.markdown(f"**流失概率 {a['churn_prob']:.1%}**")
+                if a.get("churn_prob") is not None:
+                    st.markdown(f"**流失概率 {a['churn_prob']:.1%}**")
+                if a.get("features"):
+                    fdf = pd.DataFrame(a["features"])
+                    st.bar_chart(fdf.set_index("feature")[["shap"]])
                 for f in a["features"]:
-                    st.markdown(f"- {f['feature']}: 值 {f['value']}（SHAP {f['shap']:+.3f}）")
+                    st.markdown(f"- {f['feature']}: 值 {f.get('value', '—')}（SHAP {f['shap']:+.3f}）")
 
 
 def _handle_prompt(prompt: str, conv: dict):
@@ -84,9 +88,13 @@ def _handle_prompt(prompt: str, conv: dict):
                 render_chart(df)
         attribution = r.get("attribution")
         if attribution:
-            st.markdown(f"**流失概率 {attribution['churn_prob']:.1%}**")
+            if attribution.get("churn_prob") is not None:
+                st.markdown(f"**流失概率 {attribution['churn_prob']:.1%}**")
+            if attribution.get("features"):
+                fdf = pd.DataFrame(attribution["features"])
+                st.bar_chart(fdf.set_index("feature")[["shap"]])
             for f in attribution["features"]:
-                st.markdown(f"- {f['feature']}: 值 {f['value']}（SHAP {f['shap']:+.3f}）")
+                st.markdown(f"- {f['feature']}: 值 {f.get('value', '—')}（SHAP {f['shap']:+.3f}）")
     conv["messages"].append({"role": "assistant", "content": r["answer"],
                              "sql": r.get("sql"), "attribution": attribution})
     save_conversations(st.session_state.conversations)

@@ -55,4 +55,8 @@ CASES = [
     {"id": "Q21", "q": "运行流失诊断",
      "ref": "",  # workflow 用例：结构断言，不走 SQL 对比
      "wf": True},
+    # ---- 7. 模型解释用例（结构断言，不走 SQL） ----
+    {"id": "Q22", "q": "哪些特征对流失预测最重要？",
+     "ref": "",  # 模型解释用例：结构断言（intent=explain + attribution）
+     "att": True},
 ]
