@@ -5,6 +5,7 @@
 from app.attribution import explain_overall
 from app.executor import execute_sql
 from app.llm import chat
+from app.prompts import WORKFLOW_ADVICE_SYSTEM, WORKFLOW_ADVICE_USER
 
 STEP_SQL = {
     "overview": ("SELECT ROUND(AVG(is_churned), 4) AS churn_rate, "
@@ -55,11 +56,8 @@ def run_churn_diagnosis() -> dict:
     # ④ 建议（LLM 基于前三步 + 基线生成）
     evidence = "\n".join(f"- {s['name']}: {s['detail']}" for s in steps)
     try:
-        advice = chat([{"role": "system", "content": "你是严谨的数据分析师，建议必须基于给出的证据。"
-                                                      "基线参考：留存用户配送 8.4 天 vs 流失 13.2 天、"
-                                                      "差评率 10.4% vs 14.7%、整体流失率约 81%。"},
-                       {"role": "user", "content": f"流失诊断证据：\n{evidence}\n\n"
-                                                    "请给出 3 条可落地的业务建议（每条约 1 行）。"}])
+        advice = chat([{"role": "system", "content": WORKFLOW_ADVICE_SYSTEM},
+                       {"role": "user", "content": WORKFLOW_ADVICE_USER.format(evidence=evidence)}])
         steps.append({"name": "建议", "detail": advice})
     except Exception as e:
         return {"steps": steps + [{"name": "建议", "detail": f"失败: {e}"}], "summary": "工作流执行失败"}
