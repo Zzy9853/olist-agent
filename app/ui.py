@@ -96,18 +96,14 @@ def main():
     # 会话状态初始化
     if "conversations" not in st.session_state:
         st.session_state.conversations = load_conversations()
-        if not st.session_state.conversations:
-            new_conversation(st.session_state.conversations)
-        st.session_state.current_id = next(iter(st.session_state.conversations))
+        st.session_state.current_id = None  # 草稿态：显示欢迎页，提问后创建
 
     # 侧边栏：新会话 + 历史列表 + 预置分析
     with st.sidebar:
         st.markdown("### 会话")
         if st.button("＋ 新会话", use_container_width=True):
-            cid, _ = new_conversation(st.session_state.conversations)
-            st.session_state.current_id = cid
-            st.session_state.conv_radio = cid  # 同步 radio widget state（防旧选中值弹回）
-            save_conversations(st.session_state.conversations)
+            st.session_state.current_id = None
+            st.session_state.conv_radio = None  # radio 不选中
             st.rerun()
         convs = st.session_state.conversations
         titles = {cid: conv["title"] for cid, conv in convs.items()}
@@ -115,15 +111,15 @@ def main():
             selected = st.radio("历史会话", list(titles.keys()),
                                 format_func=lambda cid: titles[cid],
                                 label_visibility="collapsed",
-                                key="conv_radio")
-            if selected != st.session_state.current_id:
+                                key="conv_radio",
+                                index=None)  # 允许无选中（草稿态）
+            if selected is not None and selected != st.session_state.current_id:
                 st.session_state.current_id = selected
                 st.rerun()
             if st.button("🗑 删除当前会话", use_container_width=True):
-                delete_conversation(st.session_state.conversations, st.session_state.current_id)
-                if not st.session_state.conversations:
-                    new_conversation(st.session_state.conversations)
-                st.session_state.current_id = next(iter(st.session_state.conversations))
+                if st.session_state.current_id is not None:
+                    delete_conversation(st.session_state.conversations, st.session_state.current_id)
+                st.session_state.current_id = None if not st.session_state.conversations else next(iter(st.session_state.conversations))
                 st.session_state.conv_radio = st.session_state.current_id
                 save_conversations(st.session_state.conversations)
                 st.rerun()
@@ -132,10 +128,13 @@ def main():
         if st.button("📊 运行流失诊断", use_container_width=True):
             st.session_state.pending_workflow = True
 
-    conv = st.session_state.conversations[st.session_state.current_id]
+    current_id = st.session_state.current_id
+    conv = (st.session_state.conversations.get(current_id)
+            if current_id is not None else None)
+    messages = conv["messages"] if conv else []
 
     # 空状态欢迎页
-    if not conv["messages"]:
+    if not messages:
         st.markdown("#### 试试这些问题：")
         c1, c2, c3, c4 = st.columns(4)
         examples = [
@@ -148,21 +147,33 @@ def main():
         for col, (label, q) in zip(cols, examples):
             with col:
                 if st.button(label, use_container_width=True):
-                    _handle_prompt(q, conv)
+                    if st.session_state.current_id is None:
+                        cid, _ = new_conversation(st.session_state.conversations)
+                        st.session_state.current_id = cid
+                        st.session_state.conv_radio = cid
+                    _handle_prompt(q, st.session_state.conversations[st.session_state.current_id])
                     st.rerun()
 
     # 历史消息渲染
-    _render_messages(conv["messages"])
+    _render_messages(messages)
 
     # 工作流按钮消费（渲染循环后，与 chat_input 对称）
     if st.session_state.get("pending_workflow"):
         st.session_state.pending_workflow = False
-        _handle_prompt("运行流失诊断", conv)
+        if st.session_state.current_id is None:
+            cid, _ = new_conversation(st.session_state.conversations)
+            st.session_state.current_id = cid
+            st.session_state.conv_radio = cid
+        _handle_prompt("运行流失诊断", st.session_state.conversations[st.session_state.current_id])
         st.rerun()
 
     # 输入框
     if prompt := st.chat_input("问点什么，例如：各州流失率排名？"):
-        _handle_prompt(prompt, conv)
+        if st.session_state.current_id is None:
+            cid, _ = new_conversation(st.session_state.conversations)
+            st.session_state.current_id = cid
+            st.session_state.conv_radio = cid
+        _handle_prompt(prompt, st.session_state.conversations[st.session_state.current_id])
         st.rerun()
 
 
