@@ -35,6 +35,23 @@ def render_chart(result_df: pd.DataFrame | None):
 
 
 def main():
+    with st.sidebar:
+        st.markdown("### 预置分析")
+        if st.button("📊 运行流失诊断", use_container_width=True):
+            st.session_state.pending_workflow = True
+
+    if st.session_state.get("pending_workflow"):
+        st.session_state.pending_workflow = False
+        st.session_state.messages.append({"role": "user", "content": "运行流失诊断"})
+        with st.chat_message("user"):
+            st.markdown("运行流失诊断")
+        with st.chat_message("assistant"):
+            with st.spinner("执行流失诊断工作流…"):
+                r = ask("运行流失诊断")
+            st.markdown(r["answer"])
+        st.session_state.messages.append({"role": "assistant", "content": r["answer"],
+                                          "sql": None, "attribution": None})
+
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])

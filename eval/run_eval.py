@@ -1,5 +1,5 @@
 # eval/run_eval.py
-"""评测：对 20 问逐个调用 agent，EX = 执行结果与参考一致的占比。
+"""评测：对 21 问逐个调用 agent，EX = 执行结果与参考一致的占比。
 结果对比规则（值等价匹配）：行数一致 → ref 每列在 gen 中按值匹配（列名/列序/行序自由）→ 数值容差 1e-6。
 放宽原因：LLM 自由起别名/增减列是正常行为，按列名严格对比会误报（如 churned_users vs churned）。
 """
@@ -89,6 +89,16 @@ def main(limit: int | None = None):
     passed, fails = [], []
     for c in cases:
         r = ask(c["q"])
+        if c.get("wf"):
+            # workflow 用例：结构断言（四步报告）
+            wf_ok = (r.get("workflow_result") is not None
+                     and len(r["workflow_result"].get("steps", [])) == 4
+                     and all(s.get("name") for s in r["workflow_result"]["steps"]))
+            if wf_ok:
+                passed.append(c["id"])
+            else:
+                fails.append((c["id"], "workflow 结构异常", str(r.get("answer", ""))[:200]))
+            continue
         if not r.get("sql"):
             fails.append((c["id"], "无 SQL", r["answer"]))
             continue

@@ -1,0 +1,6 @@
+
+EX = 20/21 = 95%
+
+❌ Q18: 结果不一致
+  gen=SELECT payment_type, COUNT(DISTINCT order_id) AS order_count FROM order_payments GROUP BY payment_type ORDER BY order_count DESC LIMIT 200
+ref=SELECT payment_type, COUNT(DISTINCT order_id) AS cnt 
