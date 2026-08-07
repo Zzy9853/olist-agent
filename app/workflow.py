@@ -44,19 +44,25 @@ def run_churn_diagnosis() -> dict:
     steps.append({"name": "对比", "detail": "；".join(detail)})
 
     # ③ 归因（整体 Top 特征）
-    top = explain_overall(top_k=3)
-    steps.append({"name": "归因",
-                  "detail": "Top3 驱动特征：" + "，".join(
-                      f"{t['feature']}（SHAP {t['mean_shap']:+.3f}）" for t in top)})
+    try:
+        top = explain_overall(top_k=3)
+        steps.append({"name": "归因",
+                      "detail": "Top3 驱动特征：" + "，".join(
+                          f"{t['feature']}（SHAP {t['mean_shap']:+.3f}）" for t in top)})
+    except Exception as e:
+        return {"steps": steps + [{"name": "归因", "detail": f"失败: {e}"}], "summary": "工作流执行失败"}
 
     # ④ 建议（LLM 基于前三步 + 基线生成）
     evidence = "\n".join(f"- {s['name']}: {s['detail']}" for s in steps)
-    advice = chat([{"role": "system", "content": "你是严谨的数据分析师，建议必须基于给出的证据。"
-                                                  "基线参考：留存用户配送 8.4 天 vs 流失 13.2 天、"
-                                                  "差评率 10.4% vs 14.7%、整体流失率约 81%。"},
-                   {"role": "user", "content": f"流失诊断证据：\n{evidence}\n\n"
-                                                "请给出 3 条可落地的业务建议（每条约 1 行）。"}])
-    steps.append({"name": "建议", "detail": advice})
+    try:
+        advice = chat([{"role": "system", "content": "你是严谨的数据分析师，建议必须基于给出的证据。"
+                                                      "基线参考：留存用户配送 8.4 天 vs 流失 13.2 天、"
+                                                      "差评率 10.4% vs 14.7%、整体流失率约 81%。"},
+                       {"role": "user", "content": f"流失诊断证据：\n{evidence}\n\n"
+                                                    "请给出 3 条可落地的业务建议（每条约 1 行）。"}])
+        steps.append({"name": "建议", "detail": advice})
+    except Exception as e:
+        return {"steps": steps + [{"name": "建议", "detail": f"失败: {e}"}], "summary": "工作流执行失败"}
 
     summary = f"流失诊断完成：{steps[0]['detail']}；{steps[2]['detail']}。"
     return {"steps": steps, "summary": summary}

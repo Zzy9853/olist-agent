@@ -58,11 +58,14 @@ def explain_overall(top_k: int = 3, sample_size: int = 5000) -> list[dict]:
     """整体流失归因：采样用户 SHAP 均值贡献 Top_k。返回 [{"feature", "mean_shap"}]。"""
     model, explainer, feats = _load()
     con = duckdb.connect(str(DB_PATH), read_only=True)
+    # reservoir 采样 + REPEATABLE(42)：同 seed 结果完全确定（可复现性，演示数字稳定）
     df = con.execute(
-        f"SELECT {', '.join(feats)} FROM user_wide USING SAMPLE {sample_size} ROWS").df()
+        f"SELECT {', '.join(feats)} FROM user_wide "
+        f"USING SAMPLE reservoir({sample_size} ROWS) REPEATABLE(42)").df()
     con.close()
     X = df[feats].astype(float).fillna(0)
     sv = explainer.shap_values(X)
+    # 均值贡献取绝对值（方向性留在单用户解释），排序按 |SHAP| 降序
     mean_shap = abs(sv).mean(axis=0)
     ranked = sorted(zip(feats, mean_shap), key=lambda t: t[1], reverse=True)
     return [{"feature": f, "mean_shap": round(float(v), 4)} for f, v in ranked[:top_k]]
