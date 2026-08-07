@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Install dependencies
+        run: |
+          pip install sqlglot mcp langgraph openai chromadb shap xgboost duckdb pandas
+      - name: Syntax gate
+        run: python -m compileall app scripts eval
+      - name: Validator tests (no data / no API)
+        run: python -m app.test_validator
+      - name: MCP tools import check (no API calls)
+        run: python -c "from app.mcp_server import ask_data, explain_user, list_tables, validate_sql; print('MCP tools OK')"
+      - name: Judge module import check
+        run: python -c "from app.judge import judge_answer; print('judge module OK')"
