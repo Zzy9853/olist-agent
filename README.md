@@ -2,6 +2,27 @@
 
 用自然语言查询 Olist 巴西电商数据的 AI 数据分析 Agent（秋招简历主力项目）。
 
+## 功能矩阵
+
+| 能力 | 状态 | 说明 |
+|------|:---:|------|
+| Text2SQL 自然语言问数 | ✅ | LangGraph 编排，EX 95%（21 问开发集） |
+| 安全 | ✅ | sqlglot AST 校验 + 12 表白名单 + LIMIT 兜底 + 5s 超时（四道闸） |
+| 评测 | ✅ | 双轨：EX 客观执行对比 + LLM-as-a-Judge 主观评分（Rubrics 三维度） |
+| RAG | ✅ | ChromaDB + qwen embedding（架构预留，文档量增长后启用） |
+| MCP | ✅ | 4 个标准工具，任意 MCP 客户端可调用 |
+| UI | ✅ | Streamlit 聊天界面 + 图表 + 归因卡片 + 工作流按钮 |
+| 归因 | ✅ | SHAP 用户级与整体级解释 |
+| 工作流 | ✅ | 流失诊断四步模板（概览/对比/归因/建议） |
+
+## 快速开始
+
+1. 下载 [Olist 巴西电商数据集](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)（9 张 CSV）与特征宽表
+2. 在 `.env` 配置 `DASHSCOPE_API_KEY` 与 `OLIST_DATA_DIR`
+3. 构建数据库：`python scripts/prepare_db.py`
+4. 启动演示：`python -m streamlit run app/ui.py`
+5. 评测（本地门禁）：`python -m eval.run_eval && python -m eval.judge_eval`
+
 ## 架构（五层）
 
 ```
@@ -20,6 +41,18 @@
 - [x] **M2 核心链路**（2026-08-03）：LangGraph 状态图（六节点 + 重试/澄清）+ sqlglot AST 校验（14/14 用例）+ 20 问评测集 **EX 95%**（两轮迭代 65% → 95%）+ 安全四道闸（AST 类型 / 12 表白名单 / 自动 LIMIT 200 / 5s 超时）+ RAG 架构预留（ChromaDB 16 块 + qwen embedding，EX 持平）——架构决策见 `docs/adr/2026-08-03-m2-nl2sql-architecture.md`
 - [x] **双轨评测体系**（2026-08-04）：EX 客观执行对比（20 问 95%）+ LLM-as-a-Judge 主观质量评分（Rubrics 三维度：正确性/完整性/洞察，平均 5.0/4.9/4.7）+ 双轨对比分析——发现"内部自洽但错误的回答可骗过无参考 Judge"，主观评分不能替代客观执行验证（决策与数据见 `eval/iter_log.md`（双轨对比））
 - [x] **M3 产品化**（2026-08-03）：Streamlit 聊天 UI（`python -m streamlit run app/ui.py`）+ intent 分类（query/explain/unsupported 路由）+ SHAP 归因（TreeExplainer 用户 Top 特征贡献）+ 多轮会话记忆（messages 注入，追问"那圣保罗呢"→SP 流失率 79.22%）；流失模型重训 **PR-AUC 0.9722** —— 决策与踩坑见 `eval/iter_log.md` M3 小节
+
+## 演示（30 秒版）
+
+```bash
+python -m streamlit run app/ui.py
+```
+
+三步话术（面试边演示边讲）：
+
+1. **查数**："整体用户流失率是多少？"（intent=query → SQL → 图表，答 81.20%）；"物流延迟率最高的 5 个品类有哪些？"（Top 5 柱状图——图表模板化，LLM 不生成绘图代码）；
+2. **归因**："为什么这个用户流失风险高？用户 ID 是 97981245c3257ea9b14befffd560177b"（intent=explain → SHAP 归因卡片：概率 66.7%，avg_delivery_days 贡献 +1.44）；
+3. **多轮追问**：追问"那圣保罗呢"（会话记忆 messages 注入生效，答 SP 流失率 79.22%，39,739 用户）。
 
 ## MCP Server（AI 客户端可调用的标准工具）
 
@@ -56,18 +89,6 @@ python scripts/prepare_db.py
 # 只读查询示例
 python -c "import duckdb; con = duckdb.connect('data/olist.db', read_only=True); print(con.execute('SELECT AVG(is_churned) FROM user_wide').fetchone())"
 ```
-
-## 演示（30 秒版）
-
-```bash
-python -m streamlit run app/ui.py
-```
-
-三步话术（面试边演示边讲）：
-
-1. **查数**："整体用户流失率是多少？"（intent=query → SQL → 图表，答 81.20%）；"物流延迟率最高的 5 个品类有哪些？"（Top 5 柱状图——图表模板化，LLM 不生成绘图代码）；
-2. **归因**："为什么这个用户流失风险高？用户 ID 是 97981245c3257ea9b14befffd560177b"（intent=explain → SHAP 归因卡片：概率 66.7%，avg_delivery_days 贡献 +1.44）；
-3. **多轮追问**：追问"那圣保罗呢"（会话记忆 messages 注入生效，答 SP 流失率 79.22%，39,739 用户）。
 
 ## 数据资产来源
 
