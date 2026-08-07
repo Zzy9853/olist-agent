@@ -19,7 +19,7 @@ GEN_PROMPT = """根据上下文生成 DuckDB SQL 回答用户问题。
 输出 JSON：{{"intent": "query"|"explain"|"unsupported"|"workflow", "sql": "生成的SQL", "reasoning": "一句思路说明", "uid": "用户ID或null"}}。
 intent 判定：
 - query：常规取数/分析问题（sql 必填）
-- explain：用户流失归因解释类问题（如"为什么这个用户流失风险高"），此时需从问题中提取 32 位十六进制用户 ID 填入 uid，sql 可为 null
+- explain：模型解释类问题——单用户归因（"为什么这个用户流失风险高"）需提取 32 位十六进制用户 ID 填入 uid；整体特征重要性/特征排名（"哪些特征最重要"/"特征重要性排名"/"流失的驱动因素"）uid 填 null（走整体归因）。sql 可为 null
 - workflow：用户要求运行预置分析工作流（如"运行流失诊断"/"流失诊断"/"跑一次流失分析"），sql/uid 均为 null
 - unsupported：与数据无关/无法用 SQL 回答（sql 为 null，reasoning 说明原因）
 """
@@ -103,15 +103,9 @@ def _gen_sql(state: State) -> State:
     intent = out.get("intent", "query")  # 旧格式兼容：默认 query
     state["intent"] = intent
     if intent == "explain":
-        uid = out.get("uid")
-        if uid:
-            state["uid"] = uid
-            state["sql"] = None  # 归因不走 SQL
-            state["error"] = None
-        else:
-            state["intent"] = "unsupported"
-            state["sql"] = None
-            state["error"] = "归因问题需要用户 ID，请提供（32 位十六进制）"
+        state["uid"] = out.get("uid") or None  # None → 整体归因
+        state["sql"] = None  # 归因不走 SQL
+        state["error"] = None
         return state
     if intent == "workflow":
         state["sql"] = None
@@ -172,9 +166,17 @@ def _explain(state: State) -> State:
 
 
 def _attribution(state: State) -> State:
-    from app.attribution import explain_user
+    from app.attribution import explain_overall, explain_user
     try:
-        result = explain_user(state["uid"])
+        if state.get("uid"):
+            result = explain_user(state["uid"])
+        else:
+            top = explain_overall(top_k=5)
+            result = {"uid": None, "churn_prob": None,
+                      "features": [{"feature": t["feature"], "shap": t["mean_shap"]}
+                                   for t in top],
+                      "summary": "整体 Top5 驱动特征：" + "，".join(
+                          f"{t['feature']}（SHAP {t['mean_shap']:+.3f}）" for t in top)}
     except Exception as e:
         state["answer"] = f"归因失败：{e}"
         return state
@@ -184,7 +186,7 @@ def _attribution(state: State) -> State:
         state["attribution"] = result
         state["answer"] = chat(
             [{"role": "system", "content": "你是严谨的数据分析师，解读必须基于给出的归因数据。"},
-             {"role": "user", "content": f"用户问题：{state['question']}\n\n归因数据：{result['summary']}\n\n请用 2-3 句中文解读该用户的流失风险与主要驱动因素。"}])
+             {"role": "user", "content": f"用户问题：{state['question']}\n\n归因数据：{result['summary']}\n\n请用 2-3 句中文解读。"}])
     return state
 
 

@@ -99,6 +99,17 @@ def main(limit: int | None = None):
             else:
                 fails.append((c["id"], "workflow 结构异常", str(r.get("answer", ""))[:200]))
             continue
+        if c.get("att"):
+            # 模型解释用例：结构断言（explain 意图 + 整体归因）
+            att_ok = (r.get("intent") == "explain"
+                      and r.get("attribution") is not None
+                      and len(r["attribution"].get("features", [])) >= 3)
+            if att_ok:
+                passed.append(c["id"])
+            else:
+                fails.append((c["id"], "模型解释结构异常",
+                              f"intent={r.get('intent')} att={r.get('attribution') is not None}"))
+            continue
         if not r.get("sql"):
             fails.append((c["id"], "无 SQL", r["answer"]))
             continue

@@ -111,3 +111,4 @@ ORDER BY Uplift;
 8. 结果行数多时聚合后返回（TOP N + LIMIT），不要返回全量明细。
 9. 时间类比较用 TIMESTAMP 列直接比较，不要转字符串。
 10. 列名带空格或大写时用双引号引用（如 "Saved Users"），DuckDB 中双引号是标识符。
+11. **特征重要性/特征排名数据来自 XGBoost 模型（feature_importances_/SHAP），数据库中不存在**——禁止用 SQL 查询或硬编码数值（如 0.168 AS importance 是虚构）。此类问题由模型解释路径回答，不走 SQL。
