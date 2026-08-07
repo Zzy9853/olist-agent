@@ -1,6 +1,6 @@
 # Olist 智能问数 Agent
 
-用自然语言查询 Olist 巴西电商数据的 AI 数据分析 Agent（秋招简历主力项目）。
+用自然语言查询 Olist 巴西电商数据的 AI 数据分析 Agent。
 
 ## 功能矩阵
 
@@ -48,7 +48,7 @@
 python -m streamlit run app/ui.py
 ```
 
-三步话术（面试边演示边讲）：
+三步演示（边演示边讲）：
 
 1. **查数**："整体用户流失率是多少？"（intent=query → SQL → 图表，答 81.20%）；"物流延迟率最高的 5 个品类有哪些？"（Top 5 柱状图——图表模板化，LLM 不生成绘图代码）；
 2. **归因**："为什么这个用户流失风险高？用户 ID 是 97981245c3257ea9b14befffd560177b"（intent=explain → SHAP 归因卡片：概率 66.7%，avg_delivery_days 贡献 +1.44）；

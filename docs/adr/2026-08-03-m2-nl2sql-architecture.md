@@ -2,7 +2,7 @@
 
 - **日期**：2026-08-03
 - **主题**：Olist 智能问数 Agent M2——NL2SQL 核心链路（编排 / 知识注入 / LLM 选型 / SQL 安全校验）的技术选型
-- **状态**：已实施（LangGraph 五节点状态图——validate 内联于 gen_sql，EX 95%；面试叙事口径为"六节点"将校验单列，见 docs/interview/01）
+- **状态**：已实施（LangGraph 五节点状态图——validate 内联于 gen_sql，EX 95%；展示口径为"六节点"将校验单列，见 docs/notes/01）
 - **作者**：Claude Code + 赵洲宇（项目 Owner）
 
 ## 背景
@@ -45,14 +45,14 @@ M2 的目标是把自然语言问题转成 DuckDB SQL 并执行解读。这条�
 
 ### 理由
 
-- **条件路由**：`_route_sql` 条件边按 `sql/attempts/error` 三出口路由（execute / retry / clarify），重试与澄清是图上的声明，不是业务代码里的 if-else——面试叙事上这是"Agent 编排"与"硬编码流程"的分水岭；
+- **条件路由**：`_route_sql` 条件边按 `sql/attempts/error` 三出口路由（execute / retry / clarify），重试与澄清是图上的声明，不是业务代码里的 if-else——叙事上这是"Agent 编排"与"硬编码流程"的分水岭；
 - **状态显式化**：`error`、`sql`、`result`、`attempts`、`rag_context` 都在 State 通道传播。重试天然支持"错误信息回灌下一次生成"（gen_sql 节点读 state["error"] 拼进 prompt），不用额外设计返回值协议；
 - **checkpoint 可观测性**：每一步的 state 可落盘回放，调试能精确回答"哪一步失败、为什么"，评测失败也能定位到具体节点；
 - **扩展叙事**：M3 的 intent 分类只需加节点 + 连边，不重写调用链。
 
 ### 补充：真实踩坑（langgraph 1.2.10）
 
-条件边的**路由函数只读 state、返回边名，返回值不写回状态通道**。曾把 `attempts += 1` 写在 `_route_sql` 里——attempts 恒为 0，永远走 retry，触发 GraphRecursionError 无限循环。修复：attempts 必须在 gen_sql 节点内递增（commit 453ba30，节点返回值才是 state 更新）。这是对"图执行语义"理解的实锤证据，面试必讲。
+条件边的**路由函数只读 state、返回边名，返回值不写回状态通道**。曾把 `attempts += 1` 写在 `_route_sql` 里——attempts 恒为 0，永远走 retry，触发 GraphRecursionError 无限循环。修复：attempts 必须在 gen_sql 节点内递增（commit cb15424，节点返回值才是 state 更新）。这是对"图执行语义"理解的实锤证据。
 
 ---
 
@@ -139,7 +139,7 @@ LLM 生成的 SQL 是注入面：可能被诱导生成 DROP/DELETE、访问非�
 - **实测 14/14**：`app/test_validator.py` 覆盖合法通过（单表/聚合/UNION/CTE）与危险拦截（DROP/DELETE/INSERT/CREATE/UPDATE/多语句/非白名单表/空 SQL），全绿；
 - **安全侧误杀修复（也是测试的价值）**：初始只放行 `exp.Select`，UNION 查询被误杀——sqlglot 把 UNION/INTERSECT/EXCEPT 解析为 **SetOperation 子类**，补白名单后放行；`WITH t AS (...)` 的 CTE 名是查询内临时表，不属于物理白名单，做 CTE 名豁免。两个误杀都是测试用例先暴露再修复的。
 
-### 安全四道闸（纵深防御，面试叙事主线）
+### 安全四道闸（纵深防御，展示主线）
 
 | # | 闸 | 实现 | 防什么 |
 |---|-----|------|--------|

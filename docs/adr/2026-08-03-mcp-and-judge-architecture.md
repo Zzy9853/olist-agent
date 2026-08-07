@@ -56,10 +56,10 @@ M3 完成后，Agent 的核心能力（NL2SQL 问数、SHAP 归因、SQL 安全�
 
 ### 补充：真实踩坑（MCP 封装的两个边界问题）
 
-1. **工具名遮蔽同名导入**：`from app.attribution import explain_user` + `@mcp.tool() def explain_user` → `def` 在模块命名空间重绑定导入名，函数体内调用自身无限递归（RecursionError）。修复：导入别名 `_explain_user` / `_validate_sql`，工具名保持对外可见（commit ffdfcd9）；
+1. **工具名遮蔽同名导入**：`from app.attribution import explain_user` + `@mcp.tool() def explain_user` → `def` 在模块命名空间重绑定导入名，函数体内调用自身无限递归（RecursionError）。修复：导入别名 `_explain_user` / `_validate_sql`，工具名保持对外可见（commit 5049567）；
 2. **numpy float32 JSON 序列化崩溃**：`round(np.float32, 4)` 仍返回 float32，MCP 层 json.dumps 抛 TypeError（numpy 2.x 收紧隐式转换）。修复：`round(float(s), 4)` 显式类型转换（`app/attribution.py`，同一 commit）。
 
-详细四段式（坑 → 根因 → 修复 → 面试话术）见 `docs/interview/04-踩坑记录.md` 坑 11/12。
+详细四段式（坑 → 根因 → 修复 → 教训）见 `docs/notes/04-踩坑记录.md` 坑 11/12。
 
 ---
 
