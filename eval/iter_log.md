@@ -238,3 +238,16 @@ M3 文档化产物：`docs/notes/01-项目概览.md`（演示叙事段）、`doc
 1. **流式接线（不是假流式）**：langgraph 多模式 astream 事件形状实测为 `(mode, payload)` 二元组——按 mode 分流 updates（状态）/custom（token），done 收口返回完整状态；UI 秒回是节点级 token 流，不是前端模拟打字机。
 2. **缓存成本优化（结构设计 > 调参）**：把 system prompt 组织为"稳定前缀 + 可变增量"，白嫖服务端隐式上下文缓存——92% 输入按 20% 计费，输入成本降至约 26%。
 3. **审计可追溯（安全闭环）**：SQL 执行全量落盘（时间/状态/行数/耗时/摘要）——安全不只有"事前拦截"（四道闸），还有"事后追溯"（审计链）。
+
+
+---
+
+## UI 三 Bug 修复（2026-08-10）
+
+**Bug 1（示例按钮列宽约束）**：欢迎页示例按钮在 `st.columns(4)` 上下文内直接调 `_handle_prompt` → 流式渲染被约束在列宽（思考时窄、完成后恢复）。修复：pending 模式（按钮只置 `pending_prompt` + rerun，主区域渲染循环后消费——与 pending_workflow 同模式）。
+
+**Bug 2（radio 选中态时序，真实浏览器专属）**：radio（key="conv_radio"）前端选中值在 `pop("conv_radio")` 后**残留**——AppTest（纯后端模拟）无法复现，真实浏览器中选中态不变、提问后 current_id 被弹回旧会话且无响应。**修复：radio 换 button 列表**（每会话一个 button，key 唯一，无 widget state 绑定问题），删除全部 6 处 conv_radio 代码。教训：**Streamlit 的 widget state 前后端行为可能不一致——涉及选中/时序的交互，优先用 button 而非 radio/selectbox**；AppTest 全绿不代表真实浏览器无 bug，交互类修复需真实浏览器复测。
+
+**Bug 3（切换残留）**：AppTest 双向切换无异常，根因链路（radio 选中态混源）已断，待真实浏览器复测确认。
+
+**验证**：AppTest 全绿（示例按钮 pending/新会话懒创建/提问响应/双向切换）；回归无炸点。
