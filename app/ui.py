@@ -15,15 +15,28 @@ st.set_page_config(page_title="Olist 智能问数 Agent", page_icon="📊", layo
 
 _CSS = """
 <style>
-.stApp { max-width: 1100px; margin: 0 auto; }
-[data-testid="stSidebar"] { background: #f8f9fb; }
-h1 { color: #1f6feb; }
-[data-testid="stChatMessage"] { border-radius: 12px; padding: 12px 16px; margin: 8px 0; }
+.stApp { max-width: 1100px; margin: 0 auto; background: #faf8f3; }
+[data-testid="stSidebar"] { background: #f4efe7; }
+h1 { color: #4a6b5a; }
+[data-testid="stChatMessage"] { background: #fff; border: 1px solid #eae3d8; border-radius: 12px; padding: 12px 16px; margin: 8px 0; }
+[data-testid="stCaptionContainer"] { color: #8f8578; }
+.stButton > button { background: #fff; border: 1px solid #eae3d8; border-radius: 12px; color: #4a443c; }
+.stButton > button:hover { border-color: #b08968; color: #b08968; }
+[data-testid="stSidebar"] [data-testid="stBaseButton-primary"],
+[data-testid="stSidebar"] [data-testid="stBaseButton-primary"]:hover:enabled { background-color: #4a6b5a; border-color: #4a6b5a; color: #fff; }
 </style>
 """
 st.markdown(_CSS, unsafe_allow_html=True)
 st.title("📊 Olist 智能问数 Agent")
 st.caption("用中文问 Olist 巴西电商数据——自由问答、流失诊断、归因解释，历史会话自动保存。")
+
+
+def _conv_label(conv: dict) -> str:
+    """会话按钮两行 label：第一行问题、第二行创建时间（title 的"问题 · 时间"拆分重组）。"""
+    parts = conv["title"].split(" · ", 1)
+    question = parts[0]
+    created = parts[1] if len(parts) == 2 else conv.get("created_at", "")
+    return f"{question}\n{created}"
 
 
 def _safe_md(text: str) -> str:
@@ -58,7 +71,7 @@ def _render_attribution_chart(features: list[dict]):
     shaps = [f.get("shap", 0) for f in features]
     fig = go.Figure(go.Bar(x=shaps, y=feats, orientation="h"))
     fig.update_layout(height=min(320, 44 * len(features) + 90),
-                      margin=dict(l=10, r=10, t=10, b=10),
+                      margin=dict(l=110, r=20, t=10, b=10),
                       xaxis_title="SHAP 值", showlegend=False)
     st.plotly_chart(fig, use_container_width=True)
 
@@ -148,22 +161,24 @@ def main():
     # 侧边栏：新会话 + 历史列表 + 预置分析
     with st.sidebar:
         st.markdown("### 会话")
-        if st.button("＋ 新会话", use_container_width=True):
+        if st.button("＋ 新对话", use_container_width=True, type="primary"):
             st.session_state.current_id = None
             st.rerun()
         convs = st.session_state.conversations
-        titles = {cid: conv["title"] for cid, conv in convs.items()}
         if convs:
             st.markdown("##### 历史会话")
-            for cid, title in titles.items():
-                mark = "● " if cid == st.session_state.current_id else "  "
-                if st.button(f"{mark}{title}", use_container_width=True, key=f"conv_btn_{cid}"):
+            for cid, conv in convs.items():
+                is_current = cid == st.session_state.current_id
+                label = ("● " if is_current else "") + _conv_label(conv)
+                if st.button(label, use_container_width=True,
+                             type="primary" if is_current else "secondary",
+                             key=f"conv_btn_{cid}"):
                     st.session_state.current_id = cid
                     st.rerun()
-            if st.button("🗑 删除当前会话", use_container_width=True):
+            if st.button("🗑 删除当前会话", use_container_width=True, type="secondary"):
                 if st.session_state.current_id is not None:
                     delete_conversation(st.session_state.conversations, st.session_state.current_id)
-                st.session_state.current_id = None if not st.session_state.conversations else next(iter(st.session_state.conversations))
+                st.session_state.current_id = None
                 save_conversations(st.session_state.conversations)
                 st.rerun()
         st.markdown("---")

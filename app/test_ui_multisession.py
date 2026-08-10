@@ -1,5 +1,5 @@
 # app/test_ui_multisession.py
-"""多会话 AppTest 验证：创建/切换/消息写入（monkeypatch ask_stream 避免真实 API）。
+"""多会话 AppTest 验证：创建/切换/消息写入/懒创建/删除跳默认（monkeypatch ask_stream 避免真实 API）。
 
 运行：python app/test_ui_multisession.py（脚本含 sys.path shim，支持直接运行）
 注：AppTest 会写真实 data/conversations.json，运行后删除该文件。
@@ -30,23 +30,25 @@ def run():
     convs = at.session_state["conversations"]
     n0 = len(convs)
     print("初始会话数:", n0)
-    assert n0 >= 1
+    assert at.session_state["current_id"] is None, "初始应为草稿态"
 
     # 发一条消息（chat_input 是 sidebar 之外的元素）；草稿态提问会创建会话
     at.chat_input[0].set_value("整体用户流失率是多少？").run()
     cid = at.session_state["current_id"]
+    assert cid is not None, "草稿态提问应创建会话"
     msgs = at.session_state["conversations"][cid]["messages"]
     print("消息后消息数:", len(msgs))
     assert len(msgs) >= 2, "应写入 user+assistant 消息"
     n1 = len(at.session_state["conversations"])
+    print("创建后会话总数:", n1)
     assert n1 == n0 + 1, "草稿态提问应创建会话"
 
-    # 新会话（sidebar 第一个按钮"＋ 新会话"）：懒创建——只进草稿态，不建会话
+    # 新对话（sidebar 第一个按钮"＋ 新对话"）：懒创建——只进草稿态，不建会话
     at.sidebar.button[0].click().run()
     convs = at.session_state["conversations"]
-    print("新会话后总数:", len(convs))
-    assert len(convs) == n1, "点击新会话不应新建会话（懒创建：草稿态）"
-    assert at.session_state["current_id"] is None, "点击新会话后应处于草稿态"
+    print("新对话后总数:", len(convs))
+    assert len(convs) == n1, "点击新对话不应新建会话（懒创建：草稿态）"
+    assert at.session_state["current_id"] is None, "点击新对话后应处于草稿态"
 
     # 草稿态提问 → 创建新会话并写入 user+assistant
     at.chat_input[0].set_value("再来一个问题").run()
@@ -55,13 +57,31 @@ def run():
     assert new_key is not None, "草稿态提问应创建会话"
     assert len(at.session_state["conversations"][new_key]["messages"]) == 2, "新会话应写入 user+assistant"
 
-    # 切回旧会话（button 列表：索引 0=新会话、1..=会话列表、随后删除/预置分析），
-    # 按标题定位旧会话按钮点击，验证消息持久化（消息数应与初始一致）
+    # 会话按钮两行 label：第一行 = 问题（title 的"问题 · 时间"拆分），label 含换行
+    convs = at.session_state["conversations"]
     old_key = list(convs.keys())[0]
     n_msgs_old = len(at.session_state["conversations"][old_key]["messages"])
     old_title = at.session_state["conversations"][old_key]["title"]
-    old_idx = next(i for i, b in enumerate(at.sidebar.button) if old_title in b.label)
-    print("切回旧会话 button:", old_idx, at.sidebar.button[old_idx].label)
+    old_question = old_title.split(" · ", 1)[0]
+    old_idx = next(i for i, b in enumerate(at.sidebar.button)
+                   if old_question == b.label.split("\n")[0].removeprefix("● "))
+    print("旧会话按钮 label:", repr(at.sidebar.button[old_idx].label))
+    assert "\n" in at.sidebar.button[old_idx].label, "会话按钮应为两行（问题\n时间）"
+
+    # 删除当前会话 → current_id=None（欢迎页）+ 会话数减少
+    n_before_del = len(at.session_state["conversations"])
+    del_idx = next(i for i, b in enumerate(at.sidebar.button) if "删除当前会话" in b.label)
+    at.sidebar.button[del_idx].click().run()
+    n_after_del = len(at.session_state["conversations"])
+    print("删除后会话总数:", n_after_del)
+    assert n_after_del == n_before_del - 1, "删除当前会话后总数应减少 1"
+    assert at.session_state["current_id"] is None, "删除当前会话后应回到草稿态（欢迎页）"
+    assert any("试试这些问题" in m.value for m in at.markdown), "删除后应显示欢迎页"
+
+    # 切回旧会话（按标题前缀定位 button，两行 label 已适配），验证消息保留
+    old_idx = next(i for i, b in enumerate(at.sidebar.button)
+                   if old_question == b.label.split("\n")[0].removeprefix("● "))
+    print("切回旧会话 button:", old_idx, repr(at.sidebar.button[old_idx].label))
     at.sidebar.button[old_idx].click().run()
     assert at.session_state["current_id"] == old_key
     assert len(at.session_state["conversations"][old_key]["messages"]) == n_msgs_old, "旧会话消息应保留"
