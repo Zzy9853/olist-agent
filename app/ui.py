@@ -65,21 +65,28 @@ def _safe_md(text: str) -> str:
 
 
 def _render_bar_chart(df: pd.DataFrame):
-    """柱状图（plotly）：X 轴标签横向，超长截断加省略号。
-    替代 st.bar_chart（vega-lite）——后者字段 spec 文本（category/value/color）
-    在特定时序下会残留显示在页面左上角（用户实测 bug），plotly 无此问题。
+    """柱状图（plotly）：X 轴标签横向、超长截断；两数值列用双 y 轴（量级差异可见）。
+    替代 st.bar_chart（vega-lite）——后者字段 spec 文本会残留显示在页面左上角（实测 bug）。
     """
     import plotly.graph_objects as go
     x_col = df.columns[0]
     y_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
     labels = [str(v) if len(str(v)) <= 10 else str(v)[:10] + "…" for v in df[x_col]]
     fig = go.Figure()
-    for c in y_cols:
-        fig.add_trace(go.Bar(x=labels, y=df[c], name=str(c)))
-    fig.update_layout(margin=dict(l=40, r=10, t=10, b=10),
-                      xaxis_title=str(x_col),
-                      showlegend=len(y_cols) > 1,
-                      height=min(320, 44 * len(df) + 90))
+    fig.add_trace(go.Bar(x=labels, y=df[y_cols[0]], name=str(y_cols[0])))
+    layout = dict(margin=dict(l=40, r=40, t=10, b=10),
+                  xaxis_title=str(x_col),
+                  showlegend=len(y_cols) > 1,
+                  height=min(320, 44 * len(df) + 90))
+    if len(y_cols) == 2:
+        # 双 y 轴：两列量级可能差异巨大（如订单数几百 vs 比率 0.16），独立右轴保证可见
+        fig.add_trace(go.Bar(x=labels, y=df[y_cols[1]], name=str(y_cols[1]), yaxis="y2"))
+        layout["yaxis"] = dict(title=str(y_cols[0]))
+        layout["yaxis2"] = dict(overlaying="y", side="right", title=str(y_cols[1]))
+    elif len(y_cols) > 2:
+        for c in y_cols[1:]:
+            fig.add_trace(go.Bar(x=labels, y=df[c], name=str(c)))
+    fig.update_layout(**layout)
     fig.update_xaxes(tickangle=0)
     st.plotly_chart(fig, use_container_width=True)
 
