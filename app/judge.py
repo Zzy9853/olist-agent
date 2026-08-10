@@ -8,14 +8,20 @@ from app.llm import chat_json
 from app.prompts import JUDGE_PROMPT, RUBRICS
 
 
-def judge_answer(question: str, answer: str) -> dict:
-    """评估单个问答对，返回 {"correctness", "completeness", "insight", "reasoning"}。"""
-    prompt = JUDGE_PROMPT.format(question=question, answer=answer, RUBRICS=RUBRICS)
-    out = chat_json([{"role": "system", "content": "你是严谨的数据分析评测官。"},
-                     {"role": "user", "content": prompt}])
-    return {
-        "correctness": int(out.get("correctness", 0)),
-        "completeness": int(out.get("completeness", 0)),
-        "insight": int(out.get("insight", 0)),
-        "reasoning": out.get("reasoning", ""),
-    }
+def judge_answer(question: str, answer: str, double: bool = False) -> dict:
+    """评估单个问答对。double=True 时双评（temperature 0.0 与 0.3）取各维度均值（降低单次波动）。"""
+    def _single(temp: float) -> dict:
+        prompt = JUDGE_PROMPT.format(question=question, answer=answer, RUBRICS=RUBRICS)
+        out = chat_json([{"role": "system", "content": "你是严谨的数据分析评测官。"},
+                         {"role": "user", "content": prompt}], temperature=temp)
+        return {"correctness": int(out.get("correctness", 0)),
+                "completeness": int(out.get("completeness", 0)),
+                "insight": int(out.get("insight", 0)),
+                "reasoning": out.get("reasoning", "")}
+
+    r1 = _single(0.0)
+    if not double:
+        return r1
+    r2 = _single(0.3)
+    return {k: round((r1[k] + r2[k]) / 2, 1) if k != "reasoning" else r1["reasoning"]
+            for k in r1}
