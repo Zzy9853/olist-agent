@@ -1,0 +1,13 @@
+# Olist 智能问数 Agent 依赖（版本与开发环境对齐，保证可复现）
+duckdb==1.5.3
+pandas==3.0.2
+scikit-learn
+xgboost==3.2.0
+shap==0.51.0
+sqlglot==30.14.0
+langgraph==1.2.10
+openai==2.38.0
+chromadb==1.5.9
+mcp==1.27.0
+streamlit==1.60.0
+plotly
