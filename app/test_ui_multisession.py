@@ -6,6 +6,7 @@
 注意：AppTest 以独立 __main__ 模块 exec 脚本，脚本内 `from app.agent import ask_stream`
 在 exec 时绑定——因此必须 patch app.agent.ask_stream（patch app.ui.xxx 不生效）。
 """
+import re
 import sys
 from pathlib import Path
 
@@ -14,6 +15,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # 使 `python app/
 from streamlit.testing.v1 import AppTest
 
 from app import agent as agent_mod
+from app.config import ROOT
+
+CONV_PATH = ROOT / "data" / "conversations.json"
 
 
 async def fake_ask_stream(q, messages=None):
@@ -24,6 +28,7 @@ async def fake_ask_stream(q, messages=None):
 
 
 def run():
+    CONV_PATH.unlink(missing_ok=True)  # 清理上次 AppTest 遗留数据，保证确定性基线
     agent_mod.ask_stream = fake_ask_stream
     at = AppTest.from_file("app/ui.py", default_timeout=60)
     at.run()
@@ -43,6 +48,17 @@ def run():
     print("创建后会话总数:", n1)
     assert n1 == n0 + 1, "草稿态提问应创建会话"
 
+    # 选中会话按钮：两行 label = 问题 + 最后提问时间（MM-DD HH:MM）
+    q1 = "整体用户流失率是多少？"
+    sel1 = next(i for i, b in enumerate(at.sidebar.button) if q1 == b.label.split("\n")[0])
+    print("选中会话按钮 label:", repr(at.sidebar.button[sel1].label))
+    assert "\n" in at.sidebar.button[sel1].label, "选中会话应为两行（问题\n时间）"
+    assert re.fullmatch(r"\d{2}-\d{2} \d{2}:\d{2}",
+                        at.sidebar.button[sel1].label.split("\n")[1]), "选中时间行应为 MM-DD HH:MM"
+
+    # 分组标题存在（测试内创建的会话 last_ts 均为今天）
+    assert any("**今天**" in m.value for m in at.sidebar.markdown), "侧栏应有分组标题（今天）"
+
     # 新对话（sidebar 第一个按钮"＋ 新对话"）：懒创建——只进草稿态，不建会话
     at.sidebar.button[0].click().run()
     convs = at.session_state["conversations"]
@@ -57,16 +73,22 @@ def run():
     assert new_key is not None, "草稿态提问应创建会话"
     assert len(at.session_state["conversations"][new_key]["messages"]) == 2, "新会话应写入 user+assistant"
 
-    # 会话按钮两行 label：第一行 = 问题（title 的"问题 · 时间"拆分），label 含换行
+    # 未选中会话：单行 label = 问题标题（无 ●、无时间行）；选中会话（新会话）：两行 = 问题 + 时间
     convs = at.session_state["conversations"]
     old_key = list(convs.keys())[0]
     n_msgs_old = len(at.session_state["conversations"][old_key]["messages"])
     old_title = at.session_state["conversations"][old_key]["title"]
     old_question = old_title.split(" · ", 1)[0]
     old_idx = next(i for i, b in enumerate(at.sidebar.button)
-                   if old_question == b.label.split("\n")[0].removeprefix("● "))
-    print("旧会话按钮 label:", repr(at.sidebar.button[old_idx].label))
-    assert "\n" in at.sidebar.button[old_idx].label, "会话按钮应为两行（问题\n时间）"
+                   if old_question == b.label.split("\n")[0])
+    print("未选中会话按钮 label:", repr(at.sidebar.button[old_idx].label))
+    assert "\n" not in at.sidebar.button[old_idx].label, "未选中会话应为单行（仅问题）"
+    q2 = "再来一个问题"
+    sel2 = next(i for i, b in enumerate(at.sidebar.button) if q2 == b.label.split("\n")[0])
+    print("选中会话按钮 label:", repr(at.sidebar.button[sel2].label))
+    assert "\n" in at.sidebar.button[sel2].label, "选中会话应为两行（问题\n时间）"
+    assert re.fullmatch(r"\d{2}-\d{2} \d{2}:\d{2}",
+                        at.sidebar.button[sel2].label.split("\n")[1]), "选中时间行应为 MM-DD HH:MM"
 
     # 删除当前会话 → current_id=None（欢迎页）+ 会话数减少
     n_before_del = len(at.session_state["conversations"])
@@ -78,14 +100,19 @@ def run():
     assert at.session_state["current_id"] is None, "删除当前会话后应回到草稿态（欢迎页）"
     assert any("试试这些问题" in m.value for m in at.markdown), "删除后应显示欢迎页"
 
-    # 切回旧会话（按标题前缀定位 button，两行 label 已适配），验证消息保留
+    # 切回旧会话（按问题前缀定位），验证消息保留 + 选中后两行 label
     old_idx = next(i for i, b in enumerate(at.sidebar.button)
-                   if old_question == b.label.split("\n")[0].removeprefix("● "))
+                   if old_question == b.label.split("\n")[0])
     print("切回旧会话 button:", old_idx, repr(at.sidebar.button[old_idx].label))
     at.sidebar.button[old_idx].click().run()
     assert at.session_state["current_id"] == old_key
     assert len(at.session_state["conversations"][old_key]["messages"]) == n_msgs_old, "旧会话消息应保留"
+    sel_idx = next(i for i, b in enumerate(at.sidebar.button)
+                   if old_question == b.label.split("\n")[0])
+    print("切回后选中 label:", repr(at.sidebar.button[sel_idx].label))
+    assert "\n" in at.sidebar.button[sel_idx].label, "选中会话应为两行 label"
 
+    CONV_PATH.unlink(missing_ok=True)  # 清理本次测试产物
     print("✅ 多会话 AppTest 通过")
 
 
