@@ -6,3 +6,4 @@ __pycache__/
 docs/interview/
 docs/superpowers/
 data/conversations.json
+data/audit.log
