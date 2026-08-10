@@ -27,8 +27,11 @@ st.caption("用中文问 Olist 巴西电商数据——自由问答、流失诊�
 
 
 def _safe_md(text: str) -> str:
-    """转义裸美元符号，防止 Markdown 数学公式渲染（如 R$142 中的 $ 触发 KaTeX）。"""
-    return text.replace("$", "\\$")
+    """转义裸美元符号，防止 Markdown 数学公式渲染（如 R$142 中的 $ 触发 KaTeX）。
+    只转义未被转义的 $（已是 \\$ 的不动）——避免双重转义破坏已有转义。
+    """
+    import re
+    return re.sub(r"(?<!\\)\$", r"\\$", text)
 
 
 def render_chart(result_df: pd.DataFrame | None):
@@ -48,21 +51,35 @@ def render_chart(result_df: pd.DataFrame | None):
             st.dataframe(df, height=300)
 
 
+def _render_attribution_chart(features: list[dict]):
+    """归因横向条形图（plotly）：特征名在 y 轴，长名可读。"""
+    import plotly.graph_objects as go
+    feats = [f["feature"] for f in features]
+    shaps = [f.get("shap", 0) for f in features]
+    fig = go.Figure(go.Bar(x=shaps, y=feats, orientation="h"))
+    fig.update_layout(height=min(320, 44 * len(features) + 90),
+                      margin=dict(l=10, r=10, t=10, b=10),
+                      xaxis_title="SHAP 值", showlegend=False)
+    st.plotly_chart(fig, use_container_width=True)
+
+
 def _render_messages(messages: list[dict]):
-    """渲染会话消息列表（含 SQL 展开与归因卡片）。"""
+    """渲染会话消息列表（含 SQL 展开、图表与归因卡片）。"""
     for msg in messages:
         with st.chat_message(msg["role"]):
             st.markdown(_safe_md(msg["content"]))
             if msg.get("sql"):
                 with st.expander("生成的 SQL"):
                     st.code(msg["sql"], language="sql")
+                ok, df = execute_sql(msg["sql"])
+                if ok:
+                    render_chart(df)
             if msg.get("attribution"):
                 a = msg["attribution"]
                 if a.get("churn_prob") is not None:
                     st.markdown(f"**流失概率 {a['churn_prob']:.1%}**")
                 if a.get("features"):
-                    fdf = pd.DataFrame(a["features"])
-                    st.bar_chart(fdf.set_index("feature")[["shap"]])
+                    _render_attribution_chart(a["features"])
                 for f in a["features"]:
                     st.markdown(f"- {f['feature']}: 值 {f.get('value', '—')}（SHAP {f['shap']:+.3f}）")
 
@@ -91,8 +108,7 @@ def _handle_prompt(prompt: str, conv: dict):
             if attribution.get("churn_prob") is not None:
                 st.markdown(f"**流失概率 {attribution['churn_prob']:.1%}**")
             if attribution.get("features"):
-                fdf = pd.DataFrame(attribution["features"])
-                st.bar_chart(fdf.set_index("feature")[["shap"]])
+                _render_attribution_chart(attribution["features"])
             for f in attribution["features"]:
                 st.markdown(f"- {f['feature']}: 值 {f.get('value', '—')}（SHAP {f['shap']:+.3f}）")
     conv["messages"].append({"role": "assistant", "content": r["answer"],
@@ -111,7 +127,7 @@ def main():
         st.markdown("### 会话")
         if st.button("＋ 新会话", use_container_width=True):
             st.session_state.current_id = None
-            st.session_state.conv_radio = None  # radio 不选中
+            st.session_state.pop("conv_radio", None)  # radio 重置（不选中，防旧值弹回）
             st.rerun()
         convs = st.session_state.conversations
         titles = {cid: conv["title"] for cid, conv in convs.items()}
@@ -128,7 +144,7 @@ def main():
                 if st.session_state.current_id is not None:
                     delete_conversation(st.session_state.conversations, st.session_state.current_id)
                 st.session_state.current_id = None if not st.session_state.conversations else next(iter(st.session_state.conversations))
-                st.session_state.conv_radio = st.session_state.current_id
+                st.session_state.pop("conv_radio", None)  # 重置 radio（options 变化 + key 删除）
                 save_conversations(st.session_state.conversations)
                 st.rerun()
         st.markdown("---")
@@ -158,7 +174,7 @@ def main():
                     if st.session_state.current_id is None:
                         cid, _ = new_conversation(st.session_state.conversations)
                         st.session_state.current_id = cid
-                        st.session_state.conv_radio = cid
+                        st.session_state.pop("conv_radio", None)  # radio 重置
                     _handle_prompt(q, st.session_state.conversations[st.session_state.current_id])
                     st.rerun()
 
@@ -171,7 +187,7 @@ def main():
         if st.session_state.current_id is None:
             cid, _ = new_conversation(st.session_state.conversations)
             st.session_state.current_id = cid
-            st.session_state.conv_radio = cid
+            st.session_state.pop("conv_radio", None)  # radio 重置
         _handle_prompt("运行流失诊断", st.session_state.conversations[st.session_state.current_id])
         st.rerun()
 
@@ -180,7 +196,7 @@ def main():
         if st.session_state.current_id is None:
             cid, _ = new_conversation(st.session_state.conversations)
             st.session_state.current_id = cid
-            st.session_state.conv_radio = cid
+            st.session_state.pop("conv_radio", None)  # radio 重置
         _handle_prompt(prompt, st.session_state.conversations[st.session_state.current_id])
         st.rerun()
 
