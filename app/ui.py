@@ -2,6 +2,8 @@
 """Olist 智能问数 Agent — Streamlit 聊天界面（多会话 + 磁盘持久化）。
 运行：python -m streamlit run app/ui.py
 """
+import time
+
 import pandas as pd
 import streamlit as st
 
@@ -31,12 +33,27 @@ st.title("📊 Olist 智能问数 Agent")
 st.caption("用中文问 Olist 巴西电商数据——自由问答、流失诊断、归因解释，历史会话自动保存。")
 
 
-def _conv_label(conv: dict) -> str:
-    """会话按钮两行 label：第一行问题、第二行创建时间（title 的"问题 · 时间"拆分重组）。"""
-    parts = conv["title"].split(" · ", 1)
-    question = parts[0]
-    created = parts[1] if len(parts) == 2 else conv.get("created_at", "")
-    return f"{question}\n{created}"
+def _group_label(ts: float) -> str:
+    """会话时间分组标题：今天/昨天/前 7 天/前 30 天/更早（YYYY-MM，如 2026-07）。"""
+    today0 = time.mktime(time.strptime(time.strftime("%Y-%m-%d"), "%Y-%m-%d"))
+    if ts >= today0:
+        return "今天"
+    if ts >= today0 - 86400:
+        return "昨天"
+    if ts >= today0 - 7 * 86400:
+        return "前 7 天"
+    if ts >= today0 - 30 * 86400:
+        return "前 30 天"
+    return time.strftime("%Y-%m", time.localtime(ts))
+
+
+def _conv_label(conv: dict, selected: bool) -> str:
+    """会话按钮 label：未选中 = 问题标题一行；选中 = 问题 + 最后提问时间两行（last_ts → MM-DD HH:MM）。"""
+    question = conv["title"].split(" · ", 1)[0]
+    if not selected:
+        return question
+    ts = conv.get("last_ts") or conv.get("created_ts") or time.time()
+    return f"{question}\n{time.strftime('%m-%d %H:%M', time.localtime(ts))}"
 
 
 def _safe_md(text: str) -> str:
@@ -99,8 +116,6 @@ def _render_messages(messages: list[dict]):
 
 def _handle_prompt(prompt: str, conv: dict):
     """处理一条用户输入：流式渲染 → 写入会话。"""
-    import asyncio
-
     conv["messages"].append({"role": "user", "content": prompt})
     if len(conv["messages"]) == 1:
         set_title(conv, prompt)
@@ -110,27 +125,23 @@ def _handle_prompt(prompt: str, conv: dict):
                for m in conv["messages"][:-1]]
 
     with st.chat_message("assistant"):
-        status = st.status("分析中…", expanded=True)
-        placeholder = st.empty()
-        text = ""
-        done = {}
+        with st.spinner("分析中…"):
+            done = {}
 
-        async def _consume():
-            nonlocal text, done
-            async for ev in ask_stream(prompt, messages=history):
-                if ev["type"] == "stage":
-                    status.update(label=f"正在{ev['label']}…")
-                elif ev["type"] == "token":
-                    text += ev["content"]
-                    placeholder.markdown(_safe_md(text))
-                elif ev["type"] == "done":
-                    done = ev
+            async def _tokens():
+                nonlocal done
+                async for ev in ask_stream(prompt, messages=history):
+                    if ev["type"] == "stage":
+                        continue
+                    if ev["type"] == "token":
+                        yield _safe_md(ev["content"])  # 逐 token 转义防 R$ 公式
+                    elif ev["type"] == "done":
+                        done = ev
 
-        asyncio.run(_consume())
-        status.update(label="完成", state="complete", expanded=False)
+            text = st.write_stream(_tokens())
         if not text and done.get("answer"):
             text = done["answer"]
-        placeholder.markdown(_safe_md(text))
+        st.markdown(_safe_md(text))
 
         if done.get("sql"):
             with st.expander("生成的 SQL"):
@@ -149,6 +160,7 @@ def _handle_prompt(prompt: str, conv: dict):
 
     conv["messages"].append({"role": "assistant", "content": done.get("answer") or text,
                              "sql": done.get("sql"), "attribution": done.get("attribution")})
+    conv["last_ts"] = time.time()  # 最后提问时间（分组与选中显示用）
     save_conversations(st.session_state.conversations)
 
 
@@ -167,14 +179,23 @@ def main():
         convs = st.session_state.conversations
         if convs:
             st.markdown("##### 历史会话")
+            # 按最后提问时间分组：今天/昨天/前7天/前30天固定序，更早（YYYY-MM）倒序
+            groups: dict[str, list[str]] = {}
             for cid, conv in convs.items():
-                is_current = cid == st.session_state.current_id
-                label = ("● " if is_current else "") + _conv_label(conv)
-                if st.button(label, use_container_width=True,
-                             type="primary" if is_current else "secondary",
-                             key=f"conv_btn_{cid}"):
-                    st.session_state.current_id = cid
-                    st.rerun()
+                ts = conv.get("last_ts") or conv.get("created_ts") or time.time()
+                groups.setdefault(_group_label(ts), []).append(cid)
+            fixed = ("今天", "昨天", "前 7 天", "前 30 天")
+            order = [g for g in fixed if g in groups]
+            order += sorted(set(groups) - set(fixed), reverse=True)
+            for g in order:
+                st.markdown(f"**{g}**")
+                for cid in groups[g]:
+                    is_current = cid == st.session_state.current_id
+                    if st.button(_conv_label(convs[cid], is_current), use_container_width=True,
+                                 type="primary" if is_current else "secondary",
+                                 key=f"conv_btn_{cid}"):
+                        st.session_state.current_id = cid
+                        st.rerun()
             if st.button("🗑 删除当前会话", use_container_width=True, type="secondary"):
                 if st.session_state.current_id is not None:
                     delete_conversation(st.session_state.conversations, st.session_state.current_id)

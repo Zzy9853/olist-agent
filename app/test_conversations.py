@@ -1,5 +1,6 @@
 # app/test_conversations.py
 """会话存储层自检：加载/保存/创建/标题/删除（用临时目录，不污染真实数据）。"""
+import json
 import tempfile
 from pathlib import Path
 
@@ -23,6 +24,20 @@ def run():
         save_conversations(convs, p)
         loaded = load_conversations(p)
         assert cid in loaded and loaded[cid]["title"] == conv["title"], "保存/加载不一致"
+
+        # ts 字段：created_ts/last_ts 存在、创建时相等、数值类型
+        assert "created_ts" in conv and "last_ts" in conv, "新会话应有 created_ts/last_ts"
+        assert conv["created_ts"] == conv["last_ts"], "创建时 last_ts 应等于 created_ts"
+        assert isinstance(conv["created_ts"], (int, float)), "ts 应为数值"
+
+        # normalize：旧数据（无 ts）加载后补齐 now，created_at 字符串保留
+        legacy = {"conv_old": {"title": "旧会话", "created_at": "08-01 10:00", "messages": []}}
+        lp = Path(d) / "legacy.json"
+        lp.write_text(json.dumps(legacy), encoding="utf-8")
+        old = load_conversations(lp)["conv_old"]
+        assert old["created_at"] == "08-01 10:00", "created_at 字符串应保留"
+        assert old["created_ts"] == old["last_ts"], "旧会话补齐的 ts 应一致"
+        assert isinstance(old["created_ts"], (int, float)), "补齐 ts 应为数值"
 
         # 消息写入
         conv["messages"].append({"role": "user", "content": "hi"})

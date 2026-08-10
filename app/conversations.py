@@ -14,14 +14,23 @@ def _now() -> str:
 
 
 def load_conversations(path: Path | None = None) -> dict:
-    """加载全部会话 {conv_id: {title, created_at, messages}}；文件缺失/损坏返回空 dict。"""
+    """加载全部会话 {conv_id: {title, created_at, messages}}；文件缺失/损坏返回空 dict。
+    normalize：缺 created_ts/last_ts 的旧会话补默认 now（兼容历史数据）。"""
     p = path or CONV_PATH
     if p.exists():
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
-            return data if isinstance(data, dict) else {}
         except (json.JSONDecodeError, OSError):
             return {}
+        if not isinstance(data, dict):
+            return {}
+        now = time.time()
+        for conv in data.values():
+            if not isinstance(conv, dict):
+                continue
+            conv.setdefault("created_ts", now)
+            conv.setdefault("last_ts", now)
+        return data
     return {}
 
 
@@ -33,9 +42,11 @@ def save_conversations(convs: dict, path: Path | None = None) -> None:
 
 
 def new_conversation(convs: dict) -> tuple[str, dict]:
-    """创建新会话并加入 convs。返回 (conv_id, conv)。"""
+    """创建新会话并加入 convs。返回 (conv_id, conv)。
+    写入 created_ts/last_ts（数值时间戳，分组排序用）；created_at 字符串保留（展示用）。"""
     conv_id = f"conv_{int(time.time() * 1000)}"
-    conv = {"title": "新会话", "created_at": _now(), "messages": []}
+    ts = time.time()
+    conv = {"title": "新会话", "created_at": _now(), "created_ts": ts, "last_ts": ts, "messages": []}
     convs[conv_id] = conv
     return conv_id, conv
 
