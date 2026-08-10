@@ -65,30 +65,38 @@ def _safe_md(text: str) -> str:
 
 
 def _render_bar_chart(df: pd.DataFrame):
-    """柱状图（plotly）：X 轴标签横向、超长截断；两数值列用双 y 轴（量级差异可见）。
+    """柱状图（plotly）：X 轴标签横向、超长截断。
+    两数值列拆上下两个独立图表——plotly 跨 y 轴双 Bar 无法分组并排（必然重合），
+    拆开则无重合、无量级差异问题（如订单数几百 vs 比率 0.16）。
     替代 st.bar_chart（vega-lite）——后者字段 spec 文本会残留显示在页面左上角（实测 bug）。
     """
     import plotly.graph_objects as go
     x_col = df.columns[0]
     y_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
     labels = [str(v) if len(str(v)) <= 10 else str(v)[:10] + "…" for v in df[x_col]]
-    fig = go.Figure()
-    fig.add_trace(go.Bar(x=labels, y=df[y_cols[0]], name=str(y_cols[0])))
-    layout = dict(margin=dict(l=40, r=40, t=10, b=10),
-                  xaxis_title=str(x_col),
-                  showlegend=len(y_cols) > 1,
-                  height=min(320, 44 * len(df) + 90))
+    palette = ["#4a6b5a", "#b08968", "#8a98ad"]
+
+    def _single(y_col: str, color: str):
+        fig = go.Figure(go.Bar(x=labels, y=df[y_col], name=str(y_col), marker_color=color))
+        fig.update_layout(margin=dict(l=40, r=20, t=10, b=10),
+                          xaxis_title=str(x_col), yaxis_title=str(y_col),
+                          height=min(260, 40 * len(df) + 70))
+        fig.update_xaxes(tickangle=0)
+        st.plotly_chart(fig, use_container_width=True)
+
     if len(y_cols) == 2:
-        # 双 y 轴：两列量级可能差异巨大（如订单数几百 vs 比率 0.16），独立右轴保证可见
-        fig.add_trace(go.Bar(x=labels, y=df[y_cols[1]], name=str(y_cols[1]), yaxis="y2"))
-        layout["yaxis"] = dict(title=str(y_cols[0]))
-        layout["yaxis2"] = dict(overlaying="y", side="right", title=str(y_cols[1]))
-    elif len(y_cols) > 2:
-        for c in y_cols[1:]:
-            fig.add_trace(go.Bar(x=labels, y=df[c], name=str(c)))
-    fig.update_layout(**layout)
-    fig.update_xaxes(tickangle=0)
-    st.plotly_chart(fig, use_container_width=True)
+        _single(y_cols[0], palette[0])
+        _single(y_cols[1], palette[1])
+    else:
+        fig = go.Figure()
+        for i, c in enumerate(y_cols):
+            fig.add_trace(go.Bar(x=labels, y=df[c], name=str(c),
+                                 marker_color=palette[i % len(palette)]))
+        fig.update_layout(margin=dict(l=40, r=20, t=10, b=10),
+                          xaxis_title=str(x_col), showlegend=True,
+                          height=min(320, 44 * len(df) + 90))
+        fig.update_xaxes(tickangle=0)
+        st.plotly_chart(fig, use_container_width=True)
 
 
 def render_chart(result_df: pd.DataFrame | None):
