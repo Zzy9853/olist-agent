@@ -18,11 +18,12 @@
 
 ## 快速开始
 
-1. 下载 [Olist 巴西电商数据集](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)（9 张 CSV）与特征宽表
-2. 在 `.env` 配置 `DASHSCOPE_API_KEY` 与 `OLIST_DATA_DIR`
-3. 构建数据库：`python scripts/prepare_db.py`
-4. 启动演示：`python -m streamlit run app/ui.py`
-5. 评测（本地门禁）：`python -m eval.run_eval && python -m eval.judge_eval`
+1. 克隆仓库并安装依赖：`git clone <repo-url> && cd olist-agent && pip install -r requirements.txt`
+2. 下载 [Olist 巴西电商数据集](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)（9 张 CSV）与特征宽表
+3. 在 `.env` 配置 `DASHSCOPE_API_KEY` 与 `OLIST_DATA_DIR`
+4. 构建数据库：`python scripts/prepare_db.py`
+5. 启动演示：`python -m streamlit run app/ui.py`
+6. 评测（本地门禁）：`python -m eval.run_eval && python -m eval.judge_eval`
 
 ## 架构（五层）
 
