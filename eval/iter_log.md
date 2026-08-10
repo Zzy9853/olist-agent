@@ -56,7 +56,7 @@
 
 Q18（支付方式订单量分布）两次失败形态不同：T7 是带 valid_orders 过滤仍与 ref 细节不一致（后已更新 ref）；本次是 LLM 漏了 valid_orders 铁律（`SELECT payment_type, COUNT(DISTINCT order_id) FROM order_payments` 直接聚合）——单次采样波动，非 RAG 注入导致（RAG 上下文是增量补充，系统头铁律始终全量注入）。
 
-**结论：持平，不回退开关**。知识库仅 ~16KB/16 块，全量注入已覆盖全部信息，RAG top-k 是冗余增量——无增益（EX 不变）也无干扰（未破坏任何已过题）。RAG_ENABLED=True 保留：这是**为可扩展性做的架构预留**——文档量增长后，全量注入的 token 成本线性增长，按问题检索 top-k 注入则成本与文档量解耦（检索→注入路径已通，届时只换切块粒度/检索策略）。
+**结论：持平，不回退开关**。知识库仅约 13.4KB/16 块，全量注入已覆盖全部信息，RAG top-k 是冗余增量——无增益（EX 不变）也无干扰（未破坏任何已过题）。RAG_ENABLED=True 保留：这是**为可扩展性做的架构预留**——文档量增长后，全量注入的 token 成本线性增长，按问题检索 top-k 注入则成本与文档量解耦（检索→注入路径已通，届时只换切块粒度/检索策略）。
 
 **踩坑（工程教训）**：chroma 1.0 移除 `CustomEmbeddingFunction` → 改为 `EmbeddingFunction` 协议 + `register_embedding_function` 注册（name() 作 config key 持久化，跨进程加载按 build_from_config 重建）；不注册则磁盘集合在新进程加载报 "Unsupported embedding function"。
 
