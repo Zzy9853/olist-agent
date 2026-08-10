@@ -64,11 +64,12 @@ def _safe_md(text: str) -> str:
     return re.sub(r"(?<!\\)\$", r"\\$", text)
 
 
-def _render_bar_chart(df: pd.DataFrame):
+def _render_bar_chart(df: pd.DataFrame, key: str | None = None):
     """柱状图（plotly）：X 轴标签横向、超长截断。
     两数值列拆上下两个独立图表——plotly 跨 y 轴双 Bar 无法分组并排（必然重合），
     拆开则无重合、无量级差异问题（如订单数几百 vs 比率 0.16）。
     替代 st.bar_chart（vega-lite）——后者字段 spec 文本会残留显示在页面左上角（实测 bug）。
+    key 用于 plotly_chart 唯一 ID（同参数多图防 StreamlitDuplicateElementId）。
     """
     import plotly.graph_objects as go
     x_col = df.columns[0]
@@ -76,17 +77,18 @@ def _render_bar_chart(df: pd.DataFrame):
     labels = [str(v) if len(str(v)) <= 10 else str(v)[:10] + "…" for v in df[x_col]]
     palette = ["#4a6b5a", "#b08968", "#8a98ad"]
 
-    def _single(y_col: str, color: str):
+    def _single(y_col: str, color: str, suffix: str):
         fig = go.Figure(go.Bar(x=labels, y=df[y_col], name=str(y_col), marker_color=color))
         fig.update_layout(margin=dict(l=40, r=20, t=10, b=10),
                           xaxis_title=str(x_col), yaxis_title=str(y_col),
                           height=min(260, 40 * len(df) + 70))
         fig.update_xaxes(tickangle=0)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True,
+                        key=f"{key}_{suffix}" if key else None)
 
     if len(y_cols) == 2:
-        _single(y_cols[0], palette[0])
-        _single(y_cols[1], palette[1])
+        _single(y_cols[0], palette[0], "a")
+        _single(y_cols[1], palette[1], "b")
     else:
         fig = go.Figure()
         for i, c in enumerate(y_cols):
@@ -96,27 +98,27 @@ def _render_bar_chart(df: pd.DataFrame):
                           xaxis_title=str(x_col), showlegend=True,
                           height=min(320, 44 * len(df) + 90))
         fig.update_xaxes(tickangle=0)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key=key)
 
 
-def render_chart(result_df: pd.DataFrame | None):
+def render_chart(result_df: pd.DataFrame | None, key: str | None = None):
     """预置图表模板：日期列→折线；Top N→plotly 柱状（横向标签+超长省略）；大结果→表格。"""
     if result_df is None or result_df.empty:
         return
     df = result_df.copy()
     date_cols = [c for c in df.columns if "date" in str(c).lower() or "month" in str(c).lower()]
     if date_cols:
-        st.line_chart(df.set_index(date_cols[0]))
+        st.line_chart(df.set_index(date_cols[0]), key=f"{key}_line" if key else None)
         return
     num_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
     if len(num_cols) >= 1 and len(df) > 1:
         if len(df) <= 20:
-            _render_bar_chart(df)
+            _render_bar_chart(df, key)
         else:
             st.dataframe(df, height=300)
 
 
-def _render_attribution_chart(features: list[dict]):
+def _render_attribution_chart(features: list[dict], key: str | None = None):
     """归因横向条形图（plotly）：特征名在 y 轴，长名可读。"""
     import plotly.graph_objects as go
     feats = [f["feature"] for f in features]
@@ -125,12 +127,12 @@ def _render_attribution_chart(features: list[dict]):
     fig.update_layout(height=min(320, 44 * len(features) + 90),
                       margin=dict(l=110, r=20, t=10, b=10),
                       xaxis_title="SHAP 值", showlegend=False)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, key=key)
 
 
 def _render_messages(messages: list[dict]):
     """渲染会话消息列表（含 SQL 展开、图表与归因卡片）。"""
-    for msg in messages:
+    for i, msg in enumerate(messages):
         with st.chat_message(msg["role"]):
             st.markdown(_safe_md(msg["content"]))
             if msg.get("sql"):
@@ -138,13 +140,13 @@ def _render_messages(messages: list[dict]):
                     st.code(msg["sql"], language="sql")
                 ok, df = execute_sql(msg["sql"])
                 if ok:
-                    render_chart(df)
+                    render_chart(df, key=f"hist_{i}")
             if msg.get("attribution"):
                 a = msg["attribution"]
                 if a.get("churn_prob") is not None:
                     st.markdown(f"**流失概率 {a['churn_prob']:.1%}**")
                 if a.get("features"):
-                    _render_attribution_chart(a["features"])
+                    _render_attribution_chart(a["features"], key=f"att_{i}")
                 for f in a["features"]:
                     st.markdown(f"- {f['feature']}: 值 {f.get('value', '—')}（SHAP {f['shap']:+.3f}）")
 
@@ -183,13 +185,13 @@ def _handle_prompt(prompt: str, conv: dict):
                 st.code(done["sql"], language="sql")
             ok, df = execute_sql(done["sql"])
             if ok:
-                render_chart(df)
+                render_chart(df, key=f"hist_{len(conv['messages'])}")
         attribution = done.get("attribution")
         if attribution:
             if attribution.get("churn_prob") is not None:
                 st.markdown(f"**流失概率 {attribution['churn_prob']:.1%}**")
             if attribution.get("features"):
-                _render_attribution_chart(attribution["features"])
+                _render_attribution_chart(attribution["features"], key=f"att_{len(conv['messages'])}")
             for f in attribution["features"]:
                 st.markdown(f"- {f['feature']}: 值 {f.get('value', '—')}（SHAP {f['shap']:+.3f}）")
 
