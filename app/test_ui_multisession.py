@@ -55,10 +55,14 @@ def run():
     assert new_key is not None, "草稿态提问应创建会话"
     assert len(at.session_state["conversations"][new_key]["messages"]) == 2, "新会话应写入 user+assistant"
 
-    # 切回旧会话，验证消息持久化（消息数应与初始一致）
+    # 切回旧会话（button 列表：索引 0=新会话、1..=会话列表、随后删除/预置分析），
+    # 按标题定位旧会话按钮点击，验证消息持久化（消息数应与初始一致）
     old_key = list(convs.keys())[0]
     n_msgs_old = len(at.session_state["conversations"][old_key]["messages"])
-    at.sidebar.radio[0].set_value(old_key).run()
+    old_title = at.session_state["conversations"][old_key]["title"]
+    old_idx = next(i for i, b in enumerate(at.sidebar.button) if old_title in b.label)
+    print("切回旧会话 button:", old_idx, at.sidebar.button[old_idx].label)
+    at.sidebar.button[old_idx].click().run()
     assert at.session_state["current_id"] == old_key
     assert len(at.session_state["conversations"][old_key]["messages"]) == n_msgs_old, "旧会话消息应保留"
 

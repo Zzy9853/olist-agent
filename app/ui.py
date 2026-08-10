@@ -150,24 +150,20 @@ def main():
         st.markdown("### 会话")
         if st.button("＋ 新会话", use_container_width=True):
             st.session_state.current_id = None
-            st.session_state.pop("conv_radio", None)  # radio 重置（不选中，防旧值弹回）
             st.rerun()
         convs = st.session_state.conversations
         titles = {cid: conv["title"] for cid, conv in convs.items()}
         if convs:
-            selected = st.radio("历史会话", list(titles.keys()),
-                                format_func=lambda cid: titles[cid],
-                                label_visibility="collapsed",
-                                key="conv_radio",
-                                index=None)  # 允许无选中（草稿态）
-            if selected is not None and selected != st.session_state.current_id:
-                st.session_state.current_id = selected
-                st.rerun()
+            st.markdown("##### 历史会话")
+            for cid, title in titles.items():
+                mark = "● " if cid == st.session_state.current_id else "  "
+                if st.button(f"{mark}{title}", use_container_width=True, key=f"conv_btn_{cid}"):
+                    st.session_state.current_id = cid
+                    st.rerun()
             if st.button("🗑 删除当前会话", use_container_width=True):
                 if st.session_state.current_id is not None:
                     delete_conversation(st.session_state.conversations, st.session_state.current_id)
                 st.session_state.current_id = None if not st.session_state.conversations else next(iter(st.session_state.conversations))
-                st.session_state.pop("conv_radio", None)  # 重置 radio（options 变化 + key 删除）
                 save_conversations(st.session_state.conversations)
                 st.rerun()
         st.markdown("---")
@@ -194,15 +190,21 @@ def main():
         for col, (label, q) in zip(cols, examples):
             with col:
                 if st.button(label, use_container_width=True):
-                    if st.session_state.current_id is None:
-                        cid, _ = new_conversation(st.session_state.conversations)
-                        st.session_state.current_id = cid
-                        st.session_state.pop("conv_radio", None)  # radio 重置
-                    _handle_prompt(q, st.session_state.conversations[st.session_state.current_id])
+                    st.session_state.pending_prompt = q
                     st.rerun()
 
     # 历史消息渲染
     _render_messages(messages)
+
+    # 欢迎页示例按钮消费（pending 模式：点击只置 pending + rerun，在此主区域消费，
+    # 避免在 columns 内流式渲染被约束列宽）
+    if st.session_state.get("pending_prompt"):
+        q = st.session_state.pop("pending_prompt")
+        if st.session_state.current_id is None:
+            cid, _ = new_conversation(st.session_state.conversations)
+            st.session_state.current_id = cid
+        _handle_prompt(q, st.session_state.conversations[st.session_state.current_id])
+        st.rerun()
 
     # 工作流按钮消费（渲染循环后，与 chat_input 对称）
     if st.session_state.get("pending_workflow"):
@@ -210,7 +212,6 @@ def main():
         if st.session_state.current_id is None:
             cid, _ = new_conversation(st.session_state.conversations)
             st.session_state.current_id = cid
-            st.session_state.pop("conv_radio", None)  # radio 重置
         _handle_prompt("运行流失诊断", st.session_state.conversations[st.session_state.current_id])
         st.rerun()
 
@@ -219,7 +220,6 @@ def main():
         if st.session_state.current_id is None:
             cid, _ = new_conversation(st.session_state.conversations)
             st.session_state.current_id = cid
-            st.session_state.pop("conv_radio", None)  # radio 重置
         _handle_prompt(prompt, st.session_state.conversations[st.session_state.current_id])
         st.rerun()
 
