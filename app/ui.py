@@ -5,7 +5,7 @@
 import pandas as pd
 import streamlit as st
 
-from app.agent import ask
+from app.agent import ask_stream
 from app.conversations import (
     load_conversations, save_conversations, new_conversation,
     set_title, delete_conversation)
@@ -85,7 +85,9 @@ def _render_messages(messages: list[dict]):
 
 
 def _handle_prompt(prompt: str, conv: dict):
-    """处理一条用户输入：渲染 → 调 agent → 渲染回答 → 写入会话。"""
+    """处理一条用户输入：流式渲染 → 写入会话。"""
+    import asyncio
+
     conv["messages"].append({"role": "user", "content": prompt})
     if len(conv["messages"]) == 1:
         set_title(conv, prompt)
@@ -93,17 +95,37 @@ def _handle_prompt(prompt: str, conv: dict):
         st.markdown(_safe_md(prompt))
     history = [{"role": m["role"], "content": m["content"]}
                for m in conv["messages"][:-1]]
+
     with st.chat_message("assistant"):
-        with st.spinner("分析中…"):
-            r = ask(prompt, messages=history)
-        st.markdown(_safe_md(r["answer"]))
-        if r.get("sql"):
+        status = st.status("分析中…", expanded=True)
+        placeholder = st.empty()
+        text = ""
+        done = {}
+
+        async def _consume():
+            nonlocal text, done
+            async for ev in ask_stream(prompt, messages=history):
+                if ev["type"] == "stage":
+                    status.update(label=f"正在{ev['label']}…")
+                elif ev["type"] == "token":
+                    text += ev["content"]
+                    placeholder.markdown(_safe_md(text))
+                elif ev["type"] == "done":
+                    done = ev
+
+        asyncio.run(_consume())
+        status.update(label="完成", state="complete", expanded=False)
+        if not text and done.get("answer"):
+            text = done["answer"]
+        placeholder.markdown(_safe_md(text))
+
+        if done.get("sql"):
             with st.expander("生成的 SQL"):
-                st.code(r["sql"], language="sql")
-            ok, df = execute_sql(r["sql"])
+                st.code(done["sql"], language="sql")
+            ok, df = execute_sql(done["sql"])
             if ok:
                 render_chart(df)
-        attribution = r.get("attribution")
+        attribution = done.get("attribution")
         if attribution:
             if attribution.get("churn_prob") is not None:
                 st.markdown(f"**流失概率 {attribution['churn_prob']:.1%}**")
@@ -111,8 +133,9 @@ def _handle_prompt(prompt: str, conv: dict):
                 _render_attribution_chart(attribution["features"])
             for f in attribution["features"]:
                 st.markdown(f"- {f['feature']}: 值 {f.get('value', '—')}（SHAP {f['shap']:+.3f}）")
-    conv["messages"].append({"role": "assistant", "content": r["answer"],
-                             "sql": r.get("sql"), "attribution": attribution})
+
+    conv["messages"].append({"role": "assistant", "content": done.get("answer") or text,
+                             "sql": done.get("sql"), "attribution": done.get("attribution")})
     save_conversations(st.session_state.conversations)
 
 
