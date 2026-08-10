@@ -39,3 +39,14 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     """批量文本嵌入（RAG 用，Task 8 起使用）。"""
     resp = get_client().embeddings.create(model=EMBED_MODEL, input=texts)
     return [item.embedding for item in resp.data]
+
+def stream_chat(messages: list[dict], temperature: float = 0.2):
+    """对话补全（流式）。逐 token yield；结束 chunk（choices 为空或 delta 为 None）自动跳过。"""
+    resp = get_client().chat.completions.create(
+        model=CHAT_MODEL, messages=messages, temperature=temperature, stream=True)
+    for chunk in resp:
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta.content
+        if delta:
+            yield delta
