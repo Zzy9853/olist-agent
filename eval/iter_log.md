@@ -265,3 +265,15 @@ M3 文档化产物：`docs/notes/01-项目概览.md`（演示叙事段）、`doc
 **Bug 3 修复（margin 溢出）**：`_render_attribution_chart` 的 `margin` 由 `dict(l=10, r=10, t=10, b=10)` → `dict(l=110, r=20, t=10, b=10)`——留足 y 轴长特征名空间，防图表文本溢出到左上角。
 
 **验证**：AppTest 全绿（创建会话 2 条消息/懒创建/两行 label 含 \n/删除→current_id=None + 欢迎页/按标题前缀切换消息保留）；TEST_CHECKLIST E1/E5 同步按钮名与删除行为、新增 E6 两行高亮项。
+
+---
+
+## 会话时间分组 + Bug 3 流式重构（2026-08-10）
+
+**分组策略（参考 DeepSeek/ChatGPT 网页版）**：侧栏会话按最后提问时间分五档——今天/昨天/前 7 天/前 30 天/更早（YYYY-MM，如 2026-07，多个月份倒序）。存储层新增 `created_ts`/`last_ts`（数值时间戳，`time.time()`），`last_ts` 每次提问后更新；旧数据在 `load_conversations` 里 normalize 补齐 now，`created_at` 展示字符串保留。选中态去 ● 前缀（primary 墨绿填充即选中态），选中按钮 label 两行 = 问题 + 最后提问时间（`last_ts` → `MM-DD HH:MM`），未选中单行问题——选项框不显示具体时间、选中才显示，与 DeepSeek 交互一致。
+
+**Bug 3 换思路（st.status 残留嫌疑 → 移除）**：左上角残留文本怀疑 `st.status` 容器在 rerun 间残留，且 status 无前端级二次验证手段。**根因处理**：直接移除 `st.status`（含 stage 事件映射），改用 `st.spinner("分析中…")` + `st.write_stream`——官方组件、无自定义容器，残留源物理消除；`plotly margin l=110` 修复保留。
+
+**write_stream 支持 async generator（接线事实）**：读安装包源码确认（1.60）——`inspect.isasyncgen(stream)` → `type_util.async_generator_to_sync`（新事件循环 `run_until_complete(anext(...))`，脚本线程无运行中 loop 故兼容 AppTest）；内部写 `st.empty` 打字机渲染，返回拼接全文。逐 token `_safe_md` 转义：`$` 跨 token 拆分后独立转义也正确，全文再 `_safe_md` 不双重转义（`(?<!\)\$` 跳过已转义）。**教训：Streamlit 交互组件有前端态不可 AppTest 复现（Bug 2 先例），对可疑残留容器优先"物理移除"而非"追加修复"。**
+
+**验证**：conversations 单测通过（ts 字段 + 旧数据 normalize）；AppTest 全绿（创建/懒创建/删除/切换、选中两行 label 含 `MM-DD HH:MM`、分组标题"今天"、未选中单行）；全量回归 9 模块通过。`data/conversations.json` 测试产物开头清理（自愈，防遗留数据撞测试标题前缀）。
