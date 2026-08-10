@@ -64,8 +64,28 @@ def _safe_md(text: str) -> str:
     return re.sub(r"(?<!\\)\$", r"\\$", text)
 
 
+def _render_bar_chart(df: pd.DataFrame):
+    """柱状图（plotly）：X 轴标签横向，超长截断加省略号。
+    替代 st.bar_chart（vega-lite）——后者字段 spec 文本（category/value/color）
+    在特定时序下会残留显示在页面左上角（用户实测 bug），plotly 无此问题。
+    """
+    import plotly.graph_objects as go
+    x_col = df.columns[0]
+    y_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+    labels = [str(v) if len(str(v)) <= 10 else str(v)[:10] + "…" for v in df[x_col]]
+    fig = go.Figure()
+    for c in y_cols:
+        fig.add_trace(go.Bar(x=labels, y=df[c], name=str(c)))
+    fig.update_layout(margin=dict(l=40, r=10, t=10, b=10),
+                      xaxis_title=str(x_col),
+                      showlegend=len(y_cols) > 1,
+                      height=min(320, 44 * len(df) + 90))
+    fig.update_xaxes(tickangle=0)
+    st.plotly_chart(fig, use_container_width=True)
+
+
 def render_chart(result_df: pd.DataFrame | None):
-    """预置图表模板：日期列→折线；Top N→横向柱状；其余数值→柱状。"""
+    """预置图表模板：日期列→折线；Top N→plotly 柱状（横向标签+超长省略）；大结果→表格。"""
     if result_df is None or result_df.empty:
         return
     df = result_df.copy()
@@ -76,7 +96,7 @@ def render_chart(result_df: pd.DataFrame | None):
     num_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
     if len(num_cols) >= 1 and len(df) > 1:
         if len(df) <= 20:
-            st.bar_chart(df.set_index(df.columns[0]))
+            _render_bar_chart(df)
         else:
             st.dataframe(df, height=300)
 
