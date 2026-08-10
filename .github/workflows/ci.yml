@@ -16,7 +16,9 @@ jobs:
           python-version: "3.14"
       - name: Install dependencies
         run: |
-          pip install sqlglot mcp langgraph openai chromadb shap xgboost duckdb pandas
+          # 版本锁定与本地环境一致（消除漂移导致的 import 失败）
+          pip install sqlglot==30.14.0 mcp==1.27.0 langgraph==1.2.10 openai==2.38.0 \
+            chromadb==1.5.9 shap==0.51.0 xgboost==3.2.0 duckdb==1.5.3 pandas==3.0.2
       - name: Syntax gate
         run: python -m compileall app scripts eval
       - name: Validator tests (no data / no API)
