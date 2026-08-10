@@ -277,3 +277,15 @@ M3 文档化产物：`docs/notes/01-项目概览.md`（演示叙事段）、`doc
 **write_stream 支持 async generator（接线事实）**：读安装包源码确认（1.60）——`inspect.isasyncgen(stream)` → `type_util.async_generator_to_sync`（新事件循环 `run_until_complete(anext(...))`，脚本线程无运行中 loop 故兼容 AppTest）；内部写 `st.empty` 打字机渲染，返回拼接全文。逐 token `_safe_md` 转义：`$` 跨 token 拆分后独立转义也正确，全文再 `_safe_md` 不双重转义（`(?<!\)\$` 跳过已转义）。**教训：Streamlit 交互组件有前端态不可 AppTest 复现（Bug 2 先例），对可疑残留容器优先"物理移除"而非"追加修复"。**
 
 **验证**：conversations 单测通过（ts 字段 + 旧数据 normalize）；AppTest 全绿（创建/懒创建/删除/切换、选中两行 label 含 `MM-DD HH:MM`、分组标题"今天"、未选中单行）；全量回归 9 模块通过。`data/conversations.json` 测试产物开头清理（自愈，防遗留数据撞测试标题前缀）。
+
+
+---
+
+## 图表组件系列修复（2026-08-10）
+
+三个连环真实坑（柱状图渲染链路）：
+1. **vega-lite spec 文本残留**：`st.bar_chart` 在特定渲染时序下把底层 spec 字段文本（category/value/color + 数据）显示在页面左上角空白处（用户截图 + 视觉模型 OCR 确认）。修复：柱状图整体换 plotly（plotly 无 vega-lite spec 文本）。根因：Streamlit 原生图表是 vega-lite 代理组件，异常时序下 spec 降级显示。
+2. **plotly 跨 y 轴双 Bar 必然重合**：两数值列（orders 几百 vs delay_rate 0.16）用 yaxis/yaxis2 双轴时，plotly 对不同轴系统的 Bar 无法分组并排——同一 x 位置叠加重合。修复：拆上下两个独立图表（各带轴标题），顺带解决量级差异不可见问题。
+3. **plotly_chart 元素 ID 冲突**：同会话多条消息渲染相同参数的 plotly_chart（如连续问两次同样问题）→ StreamlitDuplicateElementId（自动 ID 基于元素类型+参数生成）。修复：所有图表传唯一 key（按消息索引 hist_{i}/att_{i}，实时渲染与历史渲染索引对齐）。
+
+**教训**：图表组件选型是"渲染层工程"——Streamlit 原生图表（vega-lite）降级残留、plotly 跨轴语义、元素 ID 机制，都是真实环境才暴露的坑；面试可讲"图表链路的三层防御：组件选型（plotly 替代 vega-lite）、布局语义（跨轴不可并排）、ID 管理（唯一 key）"。
