@@ -251,3 +251,17 @@ M3 文档化产物：`docs/notes/01-项目概览.md`（演示叙事段）、`doc
 **Bug 3（切换残留）**：AppTest 双向切换无异常，根因链路（radio 选中态混源）已断，待真实浏览器复测确认。
 
 **验证**：AppTest 全绿（示例按钮 pending/新会话懒创建/提问响应/双向切换）；回归无炸点。
+
+---
+
+## UI 主题与交互（2026-08-10）
+
+**配色方案 B（暖米 · 杂志质感）落地**（spec 2026-08-10-ui-theme-design.md 已获批准）：主色墨绿 #4a6b5a、背景米白 #faf8f3、侧栏 #f4efe7、气泡白底 + 边框 #eae3d8 + 圆角 12px、文本主 #4a443c / 次 #8f8578、强调暖棕 #b08968。CSS 全局注入覆盖 `.stApp`/`[data-testid="stSidebar"]`/`h1`/`[data-testid="stChatMessage"]`/`.stButton > button`，欢迎页示例按钮卡片化（白底 + 边框 + 圆角 + hover）。**坑：primary 按钮默认色是 Streamlit 主题色（红）不是墨绿**——用 `[data-testid="stBaseButton-primary"]` 覆盖（1.60 实测按钮 data-testid 为 `stBaseButton-${type}`，从安装包静态 JS 验证），且选择器必须带 `[data-testid="stSidebar"]` 前缀提权重，否则会被通用按钮样式（白底）盖掉。
+
+**会话两行 + 高亮**：button label 两行 `f"{问题}\n{时间}"`（title 的"问题 · 时间"用 `split(" · ", 1)` 拆分重组，无 " · " 时回退 created_at）；当前会话 `type="primary"` + `● ` 前缀（墨绿实心），其他 `type="secondary"`；"＋ 新对话"`type="primary"` 突出。
+
+**删除跳默认**：删除当前会话后 `current_id = None`（回到草稿态欢迎页），不再跳第一个历史会话；侧栏列表保留可切换。
+
+**Bug 3 修复（margin 溢出）**：`_render_attribution_chart` 的 `margin` 由 `dict(l=10, r=10, t=10, b=10)` → `dict(l=110, r=20, t=10, b=10)`——留足 y 轴长特征名空间，防图表文本溢出到左上角。
+
+**验证**：AppTest 全绿（创建会话 2 条消息/懒创建/两行 label 含 \n/删除→current_id=None + 欢迎页/按标题前缀切换消息保留）；TEST_CHECKLIST E1/E5 同步按钮名与删除行为、新增 E6 两行高亮项。
