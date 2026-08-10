@@ -22,6 +22,7 @@
 | 4 | 改 schema/口径 → 同步更新 `knowledge/schema.md` 和 `knowledge/metrics.md` | 知识库是 Agent 的唯一事实源 |
 | 5 | API Key 只从 `.env` 读，绝不硬编码/打印 | 泄密红线 |
 | 6 | 新增功能先查 knowledge/ 是否已有定义 | 避免重复造口径、控制 token |
+| 7 | **项目有改动（代码/配置/功能/修复）→ 同步更新相关文档**（README / eval/iter_log / knowledge/ / docs/adr） | 文档与代码必须一致，防止口径漂移；改动与文档同步交付，不积压专项补同步 |
 
 ### 1.3 目录与关键文件地图
 
