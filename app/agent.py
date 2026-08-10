@@ -10,7 +10,7 @@ from langgraph.graph import StateGraph, START, END
 
 from app.config import MAX_RETRY, RAG_ENABLED
 from app.executor import execute_sql
-from app.llm import chat, chat_json
+from app.llm import chat, chat_json, stream_chat
 from app.prompts import EXPLAIN_PROMPT, build_system_prompt
 from app.rag import KnowledgeStore
 from app.validator import validate_sql
@@ -142,9 +142,19 @@ def _execute(state: State) -> State:
 def _explain(state: State) -> State:
     if state.get("result"):
         prompt = EXPLAIN_PROMPT.format(n=20, result=state["result"])
-        state["answer"] = chat(
-            [{"role": "system", "content": "你是严谨的数据分析师，解读必须基于给出的结果。"},
-             {"role": "user", "content": f"问题：{state['question']}\n\n{prompt}"}])
+        try:
+            from langgraph.config import get_stream_writer
+            writer = get_stream_writer()
+        except Exception:
+            writer = None
+        chunks = []
+        for tk in stream_chat(
+                [{"role": "system", "content": "你是严谨的数据分析师，解读必须基于给出的结果。"},
+                 {"role": "user", "content": f"问题：{state['question']}\n\n{prompt}"}]):
+            chunks.append(tk)
+            if writer is not None:
+                writer({"tokens": [tk]})
+        state["answer"] = "".join(chunks)
     else:
         state["answer"] = f"无法回答：{state.get('error', '生成 SQL 失败')}"
     return state
@@ -169,9 +179,19 @@ def _attribution(state: State) -> State:
         state["answer"] = f"未找到用户 {state['uid']}，请确认用户 ID 正确。"
     else:
         state["attribution"] = result
-        state["answer"] = chat(
-            [{"role": "system", "content": "你是严谨的数据分析师，解读必须基于给出的归因数据。"},
-             {"role": "user", "content": f"用户问题：{state['question']}\n\n归因数据：{result['summary']}\n\n请用 2-3 句中文解读。"}])
+        try:
+            from langgraph.config import get_stream_writer
+            writer = get_stream_writer()
+        except Exception:
+            writer = None
+        chunks = []
+        for tk in stream_chat(
+                [{"role": "system", "content": "你是严谨的数据分析师，解读必须基于给出的归因数据。"},
+                 {"role": "user", "content": f"用户问题：{state['question']}\n\n归因数据：{result['summary']}\n\n请用 2-3 句中文解读。"}]):
+            chunks.append(tk)
+            if writer is not None:
+                writer({"tokens": [tk]})
+        state["answer"] = "".join(chunks)
     return state
 
 
@@ -239,3 +259,78 @@ def ask(question: str, messages: list[dict] | None = None) -> dict:
     return {"answer": out.get("answer", ""), "sql": out.get("sql"),
             "intent": out.get("intent"), "attribution": out.get("attribution"),
             "workflow_result": out.get("workflow_result")}
+
+
+_STAGE_NAMES = {"retrieve": "检索知识", "gen_sql": "生成 SQL", "execute": "执行查询",
+                "explain": "解读结果", "attribution": "生成归因", "workflow": "执行工作流"}
+
+
+async def _astream_events(init: State):
+    """遍历 astream 双通道事件（langgraph 1.2 多模式产出 (mode, payload) 二元组）；
+    按节点累计 updates，供 done 提取完整最终状态。"""
+    last_updates = {}
+    async for mode, payload in GRAPH.astream(init, stream_mode=["updates", "custom"]):
+        if mode == "custom":
+            if isinstance(payload, dict) and payload.get("tokens"):
+                for tk in payload["tokens"]:
+                    yield {"type": "token", "content": tk}
+        elif mode == "updates":
+            last_updates.update(payload)  # 按节点合并；同一节点重跑（如 retry）覆盖旧值
+            for node in payload:
+                yield {"type": "stage", "node": node}
+    yield {"type": "_last", "updates": last_updates}
+
+
+def ask_stream(question: str, messages: list[dict] | None = None):
+    """流式入口（async 生成器）：yield {"type": "stage"|"token"|"done", ...}。
+    UI 专用；评测/MCP 用同步 ask()。done 事件携带完整结果。
+    """
+    init: State = {
+        "question": question,
+        "messages": messages or [],
+        "system_prompt": build_system_prompt(),
+        "attempts": 0,
+        "sql": None,
+        "result": "",
+        "answer": "",
+        "error": None,
+        "rag_context": "",
+        "intent": "query",
+        "uid": None,
+        "attribution": None,
+        "workflow_result": None,
+    }
+
+    async def _gen():
+        last = {}
+        try:
+            async for ev in _astream_events(init):
+                if ev["type"] == "_last":
+                    last = ev["updates"]
+                    continue
+                if ev["type"] == "stage":
+                    yield {"type": "stage", "node": ev["node"],
+                           "label": _STAGE_NAMES.get(ev["node"], ev["node"])}
+                else:
+                    yield ev
+        except Exception as e:
+            yield {"type": "done", "answer": f"执行失败：{e}", "sql": None,
+                   "attribution": None, "workflow_result": None}
+            return
+        # 从累计 updates 提取最终状态
+        final = {}
+        for node_update in last.values():
+            final.update(node_update)
+        if not final.get("answer"):
+            # fallback：节点更新不携带 answer 时，同步重跑取结果（仅异常路径触发）
+            out = GRAPH.invoke(init)
+            final = {"answer": out.get("answer", ""), "sql": out.get("sql"),
+                     "attribution": out.get("attribution"),
+                     "workflow_result": out.get("workflow_result")}
+        yield {"type": "done",
+               "answer": final.get("answer", ""),
+               "sql": final.get("sql"),
+               "attribution": final.get("attribution"),
+               "workflow_result": final.get("workflow_result")}
+
+    return _gen()

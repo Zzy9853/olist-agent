@@ -4,7 +4,7 @@
 """
 from app.attribution import explain_overall
 from app.executor import execute_sql
-from app.llm import chat
+from app.llm import stream_chat
 from app.prompts import WORKFLOW_ADVICE_SYSTEM, WORKFLOW_ADVICE_USER
 
 STEP_SQL = {
@@ -56,8 +56,18 @@ def run_churn_diagnosis() -> dict:
     # ④ 建议（LLM 基于前三步 + 基线生成）
     evidence = "\n".join(f"- {s['name']}: {s['detail']}" for s in steps)
     try:
-        advice = chat([{"role": "system", "content": WORKFLOW_ADVICE_SYSTEM},
-                       {"role": "user", "content": WORKFLOW_ADVICE_USER.format(evidence=evidence)}])
+        try:
+            from langgraph.config import get_stream_writer
+            writer = get_stream_writer()
+        except Exception:
+            writer = None
+        advice_chunks = []
+        for tk in stream_chat([{"role": "system", "content": WORKFLOW_ADVICE_SYSTEM},
+                               {"role": "user", "content": WORKFLOW_ADVICE_USER.format(evidence=evidence)}]):
+            advice_chunks.append(tk)
+            if writer is not None:
+                writer({"tokens": [tk]})
+        advice = "".join(advice_chunks)
         steps.append({"name": "建议", "detail": advice})
     except Exception as e:
         return {"steps": steps + [{"name": "建议", "detail": f"失败: {e}"}], "summary": "工作流执行失败"}
