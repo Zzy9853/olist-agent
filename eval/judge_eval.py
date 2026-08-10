@@ -24,7 +24,7 @@ def main(limit: int | None = None):
             ok2, ref = execute_sql(c["ref"])
             ex_pass = ok and ok2 and results_equal(gen, ref)
         # Judge 评分（主观）
-        j = judge_answer(c["q"], r["answer"])
+        j = judge_answer(c["q"], r["answer"], double=True)
         rows.append({"id": c["id"], "ex": ex_pass, **j})
 
     df = pd.DataFrame(rows)
