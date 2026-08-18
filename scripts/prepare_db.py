@@ -1,14 +1,19 @@
-"""M1: 构建 Olist 问数 Agent 的 DuckDB 数据库。
+"""构建 Olist 问数 Agent 的 DuckDB 数据库（自包含，M1 产物）。
 
-从电商项目 CSV 加载 9 张原始表 + 用户宽表到 olist.db，
-显式定义列类型，保证 Agent 生成的 SQL 拿到确定性的 schema。
+从 .env 的 OLIST_DATA_DIR（9 张原始 CSV 目录）构建 olist.db：
+- 9 张基础表（显式列类型，保证 Agent 生成的 SQL 拿到确定性的 schema）
+- user_wide 宽表：特征由 sql/feature_wide.sql 从 9 张表构建，churn_prob 由
+  仓库内 data/churn_model.json 打分得到（预测类问题直接查它）
+- ab_test_results：来自仓库内 data/ab_test_results.csv（分析结果，非原始数据）
 
-数据路径从 .env 的 OLIST_DATA_DIR 读取（不硬编码，保证仓库可移植）。
+全新用户只需 9 张 Kaggle CSV + 自己的 .env 配置即可完整复现。
 """
+import json
 import os
 from pathlib import Path
 
 import duckdb
+import xgboost as xgb
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -29,16 +34,20 @@ _ENV = _load_env()
 OLIST_DATA_DIR = _ENV.get("OLIST_DATA_DIR") or os.environ.get("OLIST_DATA_DIR")
 if not OLIST_DATA_DIR:
     raise RuntimeError(
-        "缺少数据目录配置：请在项目 .env 中设置 OLIST_DATA_DIR（Olist 原始 CSV 目录），"
-        "例如 OLIST_DATA_DIR=C:/path/to/olist_data；宽表与 AB 表默认从 {OLIST_DATA_DIR}/../olist_analysis/data/ 读取。")
+        "缺少数据目录配置：请在项目 .env 中设置 OLIST_DATA_DIR（9 张原始 CSV 目录），"
+        "例如 OLIST_DATA_DIR=C:/path/to/olist_data")
 
 OLIST_DATA = OLIST_DATA_DIR
-WIDE_CSV = os.path.join(os.path.dirname(OLIST_DATA), "olist_analysis", "data", "olist_user_wide_table.csv")
-AB_CSV = os.path.join(os.path.dirname(OLIST_DATA), "olist_analysis", "data", "ab_test_results.csv")
 DB_PATH = ROOT / "data" / "olist.db"
+WIDE_SQL = ROOT / "sql" / "feature_wide.sql"
+AB_CSV = ROOT / "data" / "ab_test_results.csv"
+MODEL_PATH = ROOT / "data" / "churn_model.json"
+FEATURE_COLS_PATH = ROOT / "data" / "feature_cols.json"
+
 
 def csv(name):
     return os.path.join(OLIST_DATA, name).replace("\\", "/")
+
 
 TABLES = [
     # (表名, CSV 文件名, 列定义 SQL)
@@ -76,11 +85,45 @@ TABLES = [
         geolocation_city VARCHAR, geolocation_state VARCHAR"""),
 ]
 
+
+def _build_user_wide(con):
+    """宽表特征：从 9 张基础表用 sql/feature_wide.sql 构建，并处理同用户多地址去重。"""
+    sql = WIDE_SQL.read_text(encoding="utf-8")
+    con.execute(f"CREATE TABLE user_wide_raw AS {sql}")
+    # 去重：SQL 从 customers 关联地址，同用户多地址会产生多行（customer_unique_id 重复，
+    # 行为特征相同、地址列不同）——每用户保留首行
+    con.execute("""
+        CREATE TABLE user_wide AS
+        SELECT * EXCLUDE (rn) FROM (
+            SELECT *, ROW_NUMBER() OVER (PARTITION BY customer_unique_id ORDER BY 1) AS rn
+            FROM user_wide_raw
+        ) WHERE rn = 1
+    """)
+    con.execute("DROP TABLE user_wide_raw")
+
+
+def _score_churn(con):
+    """加载仓库内模型，为 user_wide 补 churn_prob 列（预测类问题直接查它）。"""
+    if not MODEL_PATH.exists() or not FEATURE_COLS_PATH.exists():
+        raise RuntimeError("缺少模型文件 data/churn_model.json / feature_cols.json")
+    model = xgb.XGBClassifier()
+    model.load_model(str(MODEL_PATH))
+    feature_cols = json.loads(FEATURE_COLS_PATH.read_text(encoding="utf-8"))
+    df = con.execute("SELECT * FROM user_wide").df()
+    df = df.replace([float("inf"), float("-inf")], float("nan"))
+    X = df[feature_cols].astype(float).fillna(0)
+    df["churn_prob"] = model.predict_proba(X)[:, 1]
+    con.register("user_wide_scored", df)
+    con.execute("CREATE OR REPLACE TABLE user_wide AS SELECT * FROM user_wide_scored")
+    con.unregister("user_wide_scored")
+
+
 def main():
     if os.path.exists(DB_PATH):
         os.remove(DB_PATH)
     con = duckdb.connect(DB_PATH)
 
+    # 1. 9 张基础表
     for table, fname, cols in TABLES:
         if table == "product_category_translation":
             # 源 CSV 首列带 UTF-8 BOM，用 names 参数绕开列名问题
@@ -101,24 +144,17 @@ def main():
             SELECT {cast_cols} FROM read_csv_auto('{csv(fname)}')
         """)
 
-    # 用户宽表（含 XGBoost 预测概率 churn_prob，预测类问题直接查它）
-    # 去重：源宽表含 122 个"同用户多地址"行（customer_unique_id 重复，
-    # 行为特征相同、地址列不同，评测发现于 2026-08-03）——每用户保留首行
-    con.execute(f"""
-        CREATE TABLE user_wide AS
-        SELECT * EXCLUDE (rn) FROM (
-            SELECT *, ROW_NUMBER() OVER (PARTITION BY customer_unique_id ORDER BY 1) AS rn
-            FROM read_csv_auto('{WIDE_CSV.replace(chr(92), '/')}')
-        ) WHERE rn = 1
-    """)
+    # 2. 用户宽表（特征 + 预测概率 churn_prob）
+    _build_user_wide(con)
+    _score_churn(con)
 
-    # AB 实验敏感性分析结果（R$15/25/50 券 × 6 档留存提升率）
+    # 3. AB 实验敏感性分析结果（仓库内静态结果表）
     con.execute(f"""
         CREATE TABLE ab_test_results AS
-        SELECT * FROM read_csv_auto('{AB_CSV.replace(chr(92), '/')}')
+        SELECT * FROM read_csv_auto('{str(AB_CSV).replace(chr(92), "/")}')
     """)
 
-    # 常用视图：口径统一的"有效订单"
+    # 4. 常用视图：口径统一的"有效订单"
     con.execute("""
         CREATE VIEW valid_orders AS
         SELECT * FROM orders
@@ -143,8 +179,11 @@ def main():
     ro = duckdb.connect(DB_PATH, read_only=True)
     print("  max order date:", ro.execute("SELECT MAX(order_purchase_timestamp) FROM orders").fetchone()[0])
     print("  流失率:", ro.execute("SELECT ROUND(AVG(is_churned),4) FROM user_wide").fetchone()[0])
+    nulls = ro.execute("SELECT COUNT(*) - COUNT(churn_prob) FROM user_wide").fetchone()[0]
+    print("  churn_prob 非空:", nulls == 0)
     ro.close()
-    print(f"\n✅ olist.db 构建完成: {DB_PATH} ({os.path.getsize(DB_PATH)/1024/1024:.1f} MB)")
+    print(f"\n[OK] olist.db 构建完成: {DB_PATH} ({os.path.getsize(DB_PATH)/1024/1024:.1f} MB)")
+
 
 if __name__ == "__main__":
     main()
