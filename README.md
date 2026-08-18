@@ -19,7 +19,7 @@
 ## 快速开始
 
 1. 克隆仓库并安装依赖：`git clone <repo-url> && cd olist-agent && pip install -r requirements.txt`
-2. 下载 [Olist 巴西电商数据集](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)（9 张 CSV）与特征宽表
+2. 下载 [Olist 巴西电商数据集](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)（9 张 CSV）
 3. 在 `.env` 配置 `DASHSCOPE_API_KEY` 与 `OLIST_DATA_DIR`
 4. 构建数据库：`python scripts/prepare_db.py`
 5. 启动演示：`python -m streamlit run app/ui.py`
@@ -38,7 +38,7 @@
 
 ## 里程碑状态
 
-- [x] **M1 数据层**（2026-08-03）：olist.db（9 原始表 + user_wide 95,106×32 + ab_test_results），只读连接验证通过
+- [x] **M1 数据层**（2026-08-03）：olist.db（9 原始表 + user_wide 94,983×32 + ab_test_results），只读连接验证通过
 - [x] M1 知识库：`knowledge/schema.md`（数据字典）+ `knowledge/metrics.md`（指标口径 + 7 条 SQL 模板，全部验证可执行）
 - [x] **M2 核心链路**（2026-08-03）：LangGraph 状态图（六节点 + 重试/澄清）+ sqlglot AST 校验（14/14 用例）+ 22 问评测集 **EX 95%**（两轮迭代 65% → 95%，含工作流用例）+ 安全四道闸（AST 类型 / 12 表白名单 / 自动 LIMIT 200 / 5s 超时）+ RAG 架构预留（ChromaDB 16 块 + qwen embedding，EX 持平）——架构决策见 `docs/adr/2026-08-03-m2-nl2sql-architecture.md`
 - [x] **双轨评测体系**（2026-08-04）：EX 客观执行对比（20 问 95%）+ LLM-as-a-Judge 主观质量评分（Rubrics 三维度：正确性/完整性/洞察，平均 5.0/4.9/4.7）+ 双轨对比分析——发现"内部自洽但错误的回答可骗过无参考 Judge"，主观评分不能替代客观执行验证（决策与数据见 `eval/iter_log.md`（双轨对比））
@@ -75,7 +75,7 @@ python -m app.mcp_server        # stdio 传输启动
 
 ## 数据准备
 
-本仓库不含原始数据。需要 [Olist 巴西电商数据集](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)（9 张 CSV）与特征宽表（`olist_user_wide_table.csv`、`ab_test_results.csv`），然后在项目 `.env` 配置：
+本仓库不含原始数据。只需 [Olist 巴西电商数据集](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)（9 张 CSV）——宽表与 AB 表由 `scripts/prepare_db.py` 从 9 张表自动构建（宽表特征 SQL：`sql/feature_wide.sql`，`churn_prob` 由仓库内 `data/churn_model.json` 打分）。然后在项目 `.env` 配置：
 
 ```
 DASHSCOPE_API_KEY=<阿里云百炼 API Key>
@@ -94,9 +94,9 @@ python -c "import duckdb; con = duckdb.connect('data/olist.db', read_only=True);
 
 ## 数据资产来源
 
-- 原始 CSV：`C:\Users\10936\Desktop\电商\olist_data\`
-- 宽表 + AB 表：`C:\Users\10936\Desktop\电商\olist_analysis\data\`
-- 语义层口径出处：`olist_analysis\sql\02_churn_feature_wide.sql` + `report\olist_churn_report.md`
+- 原始 CSV：`C:\Users\10936\Desktop\电商\olist_data\`（9 张 Kaggle 表）
+- 宽表特征 SQL：`sql/feature_wide.sql`（本仓库，构建时自动从 9 张表生成宽表）
+- 口径出处：源电商项目 `02_churn_feature_wide.sql` + `report/olist_churn_report.md`
 
 ## 环境
 

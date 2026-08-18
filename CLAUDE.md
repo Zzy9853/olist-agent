@@ -10,7 +10,7 @@
 
 ### 1.1 继承的全局准则
 
-遵守 `C:\Users\10936\CLAUDE.md`：Think Before Coding（先陈述假设/歧义）、Simplicity First（最小代码）、Surgical Changes（只改该改的）、Goal-Driven（验证闭环）。冲突时以全局为准。
+遵守 `C:\Users\10936\CLAUDE.md` 的五条准则：先冻结边界再动手（1.1）、最小实现（1.2）、外科手术式修改+追根因（1.3）、验证是交付的一部分（1.4）、单一事实源（1.5）。冲突时以全局为准。
 
 ### 1.2 项目特有硬规则
 
@@ -33,7 +33,9 @@ olist_agent/
 │   ├── schema.md              # 数据字典（11 张表/视图：类型、含义、陷阱）
 │   └── metrics.md             # 指标口径字典 + 7 条 SQL 模板 + 10 条生成规则
 ├── scripts/
-│   └── prepare_db.py          # 数据库构建脚本（M1 产物）
+│   └── prepare_db.py          # 数据库构建脚本（M1 产物；自包含：9 基础表 + 宽表 + churn_prob + AB 表）
+├── sql/
+│   └── feature_wide.sql       # 宽表特征 SQL（prepare_db.py 自动调用）
 ├── docs/
 │   ├── notes/                 # 工程文档：ADR + 要点记录（格式见 Part 2.2）
 │   └── superpowers/           # specs/ 设计文档 + plans/ 实施计划
