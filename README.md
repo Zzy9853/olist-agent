@@ -40,7 +40,7 @@
 
 - [x] **M1 数据层**（2026-08-03）：olist.db（9 原始表 + user_wide 94,983×32 + ab_test_results），只读连接验证通过
 - [x] M1 知识库：`knowledge/schema.md`（数据字典）+ `knowledge/metrics.md`（指标口径 + 7 条 SQL 模板，全部验证可执行）
-- [x] **M2 核心链路**（2026-08-03）：LangGraph 状态图（六节点 + 重试/澄清）+ sqlglot AST 校验（14/14 用例）+ 22 问评测集 **EX 95%**（两轮迭代 65% → 95%，含工作流用例）+ 安全四道闸（AST 类型 / 12 表白名单 / 自动 LIMIT 200 / 5s 超时）+ RAG 架构预留（ChromaDB 16 块 + qwen embedding，EX 持平）——架构决策见 `docs/adr/2026-08-03-m2-nl2sql-architecture.md`
+- [x] **M2 核心链路**（2026-08-03）：LangGraph 状态图（六节点 + 重试/澄清）+ sqlglot AST 校验（14/14 用例）+ 22 问评测集 **EX 95%**（两轮迭代 65% → 95%，含工作流用例）+ 安全四道闸（AST 类型 / 12 表白名单 / 自动 LIMIT 200 / 5s 超时）+ RAG 架构预留（ChromaDB 16 块 + qwen embedding，EX 持平）——架构决策见 `eval/iter_log.md`
 - [x] **双轨评测体系**（2026-08-04）：EX 客观执行对比（20 问 95%）+ LLM-as-a-Judge 主观质量评分（Rubrics 三维度：正确性/完整性/洞察，平均 5.0/4.9/4.7）+ 双轨对比分析——发现"内部自洽但错误的回答可骗过无参考 Judge"，主观评分不能替代客观执行验证（决策与数据见 `eval/iter_log.md`（双轨对比））
 - [x] **M3 产品化**（2026-08-03）：Streamlit 聊天 UI（`python -m streamlit run app/ui.py`）+ intent 分类（query/explain/unsupported 路由）+ SHAP 归因（TreeExplainer 用户 Top 特征贡献）+ 多轮会话记忆（messages 注入，追问"那圣保罗呢"→SP 流失率 79.22%）；流失模型重训 **PR-AUC 0.9722** —— 决策与踩坑见 `eval/iter_log.md` M3 小节
 

@@ -4,7 +4,7 @@
 > 1. **开发质量**：交付生产级思维的数据分析 Agent（安全、可评测、可深挖）
 > 2. **文档驱动**：每步开发同步沉淀工程文档（决策记录/原理说明/踩坑记录）
 >
-> 读者需同时遵守全局 C:\Users\10936\CLAUDE.md 的行为准则（Think Before Coding / Simplicity First / Surgical Changes / Goal-Driven Execution），本文件只补充项目特有规则，不重复全局内容。
+> 读者需同时遵守全局 C:\Users\10936\CLAUDE.md 的行为准则（先冻结边界/最小实现/追根因/验证闭环/单一事实源），本文件只补充项目特有规则，不重复全局内容。
 
 ## Part 1 开发准则
 
@@ -22,7 +22,7 @@
 | 4 | 改 schema/口径 → 同步更新 `knowledge/schema.md` 和 `knowledge/metrics.md` | 知识库是 Agent 的唯一事实源 |
 | 5 | API Key 只从 `.env` 读，绝不硬编码/打印 | 泄密红线 |
 | 6 | 新增功能先查 knowledge/ 是否已有定义 | 避免重复造口径、控制 token |
-| 7 | **项目有改动（代码/配置/功能/修复）→ 同步更新相关文档**（README / eval/iter_log / knowledge/ / docs/adr） | 文档与代码必须一致，防止口径漂移；改动与文档同步交付，不积压专项补同步 |
+| 7 | **项目有改动（代码/配置/功能/修复）→ 同步更新相关文档**（README / eval/iter_log / knowledge/） | 文档与代码必须一致，防止口径漂移；改动与文档同步交付，不积压专项补同步 |
 
 ### 1.3 目录与关键文件地图
 
@@ -37,9 +37,8 @@ olist_agent/
 ├── sql/
 │   └── feature_wide.sql       # 宽表特征 SQL（prepare_db.py 自动调用）
 ├── docs/
-│   ├── notes/                 # 工程文档：ADR + 要点记录（格式见 Part 2.2）
-│   └── superpowers/           # specs/ 设计文档 + plans/ 实施计划
-└── app/                       # M3 Streamlit 应用（规划中）
+│   └── TEST_CHECKLIST.md      # 验收测评清单
+└── app/                       # M3 Streamlit 应用
 ```
 
 ## Part 2 文档沉淀协议
@@ -69,38 +68,33 @@ olist_agent/
 ### 2.2 强制产出物
 
 ```
-docs/adr/<YYYY-MM-DD>-<主题>.md    # 模板：日期/主题/背景/方案对比/决策/理由
-docs/notes/
-├── 01-项目概览.md                # STAR 结构：1 分钟版 + 3 分钟版
-├── 02-架构与流程.md              # 文字 + ASCII 架构图（讲解准备）
-├── 03-原理问答.md                # 按主题分章：问题-答案要点-追问链
-├── 04-踩坑记录.md                # 坑 → 根因 → 修复 → 教训
-└── 05-项目价值与量化.md          # 项目描述文案（STAR + 量化）
+里程碑文档（2.4 模板） → 追加至 eval/iter_log.md
+踩坑记录（坑 → 根因 → 修复 → 教训） → 追加至 eval/iter_log.md
+验收清单 → 更新 docs/TEST_CHECKLIST.md
 ```
 
 **更新规则**：增量更新——每次里程碑只追加新内容，不重写已有章节。
 
 ### 2.3 原理级知识清单
 
-每个主题应能讲清原理（示例问题见下表），讲解深度以此为准：
+每个主题需理解到能讲清原理的深度（下表为覆盖范围）：
 
-| 主题 | 必须能讲清的原理 | 原理自测问题 |
-|------|-----------------|-------------|
-| Agent 基础 | ReAct 循环、Agent vs Workflow、Function Calling 机制、工具调用失败重试/死循环防护 | Function Calling 是怎么被 LLM 触发执行的？ |
-| RAG | 四步链路（切分→嵌入→检索→生成）、向量检索（ANN/HNSW）、混合检索+重排、幻觉控制 | HNSW 的原理是什么？为什么快？ |
-| Text2SQL | 难点（schema 超大/口径歧义/多表 join）、AST 校验原理、安全设计 | 怎么防止 LLM 生成危险 SQL？ |
-| 编排 | LangGraph 状态图（节点/边/状态/checkpoint）、Chain vs Agent 区别 | 为什么用状态图而不是简单的链式调用？ |
-| 评测 | EX 执行准确率、Spider/BIRD 基准、坏例→few-shot 数据飞轮 | 你怎么量化 Agent 的准确率？ |
-| 工程化 | 会话记忆、Streamlit 部署、API Key 安全管理 | 多轮对话怎么保持上下文？ |
+| 主题 | 需讲清的原理 |
+|------|-------------|
+| Agent 基础 | ReAct 循环、Agent vs Workflow、Function Calling 机制、工具调用失败重试/死循环防护 |
+| RAG | 四步链路（切分→嵌入→检索→生成）、向量检索（ANN/HNSW）、混合检索+重排、幻觉控制 |
+| Text2SQL | 难点（schema 超大/口径歧义/多表 join）、AST 校验原理、安全设计 |
+| 编排 | LangGraph 状态图（节点/边/状态/checkpoint）、Chain vs Agent 区别 |
+| 评测 | EX 执行准确率、Spider/BIRD 基准、坏例→few-shot 数据飞轮 |
+| 工程化 | 会话记忆、Streamlit 部署、API Key 安全管理 |
 
 ### 2.4 里程碑文档模板（五段式）
 
 ```
 ## M<x> 里程碑文档（日期）
-### 做了什么（STAR，3 句）
+### 做了什么（3 句）
 ### 为什么这么做（决策 + 理由）
 ### 技术亮点（2-3 个关键点）
-### 可能的 5 个追问（含回答要点）
 ### 本项目能延伸到的原理（链接到 2.3 清单）
 ```
 
@@ -108,5 +102,5 @@ docs/notes/
 
 - 本文件与全部工程文档**全中文**
 - 讲解时机由 Claude 自行判断（判断标准见 2.1）
-- 新增产出物（ADR/里程碑文档）后立即 commit（git）
+- 新增产出物（里程碑文档/踩坑记录）后立即 commit（git）
 - 里程碑完成后可用 `/compact` 收口（手动压缩上下文）；关键信息已由记忆系统与文档落盘，不依赖上下文留存
