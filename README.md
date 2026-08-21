@@ -19,11 +19,12 @@
 ## 快速开始
 
 1. 克隆仓库并安装依赖：`git clone <repo-url> && cd olist-agent && pip install -r requirements.txt`
-2. 下载 [Olist 巴西电商数据集](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)（9 张 CSV）
-3. 在 `.env` 配置 `DASHSCOPE_API_KEY` 与 `OLIST_DATA_DIR`
-4. 构建数据库：`python scripts/prepare_db.py`
-5. 启动演示：`python -m streamlit run app/ui.py`
-6. 评测（本地门禁）：`python -m eval.run_eval && python -m eval.judge_eval`
+2. 准备数据（二选一）：
+   - **方式 A（开箱即用）**：从 [最新 Release](https://github.com/Zzy9853/olist-agent/releases/latest) 下载 `olist-data.zip`，解压得 `olist.db` 放到 `data/`；
+   - **方式 B（自行构建）**：下载 [Olist 数据集](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)（9 张 CSV），配置 `OLIST_DATA_DIR` 后运行 `python scripts/prepare_db.py`
+3. 在 `.env` 配置 `DASHSCOPE_API_KEY`（方式 B 还需 `OLIST_DATA_DIR`）
+4. 启动演示：`python -m streamlit run app/ui.py`
+5. 评测（本地门禁）：`python -m eval.run_eval && python -m eval.judge_eval`
 
 ## 架构（五层）
 
@@ -75,12 +76,18 @@ python -m app.mcp_server        # stdio 传输启动
 
 ## 数据准备
 
-本仓库不含原始数据。只需 [Olist 巴西电商数据集](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)（9 张 CSV）——宽表与 AB 表由 `scripts/prepare_db.py` 从 9 张表自动构建（宽表特征 SQL：`sql/feature_wide.sql`，`churn_prob` 由仓库内 `data/churn_model.json` 打分）。然后在项目 `.env` 配置：
+本仓库不含原始数据，两种方式备齐：
+- **方式 A**：下载 [olist-data.zip](https://github.com/Zzy9853/olist-agent/releases/latest)（已构建的完整数据库，约 45MB），解压得 `olist.db` 放入 `data/`；
+- **方式 B**：从 [Olist 数据集](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)（9 张 CSV）自行构建——宽表与 AB 表由 `scripts/prepare_db.py` 自动构建（宽表特征 SQL：`sql/feature_wide.sql`，`churn_prob` 由仓库内 `data/churn_model.json` 打分）。
+
+在项目 `.env` 配置：
 
 ```
 DASHSCOPE_API_KEY=<阿里云百炼 API Key>
-OLIST_DATA_DIR=<Olist 原始 CSV 目录>
+OLIST_DATA_DIR=<Olist 原始 CSV 目录>  # 方式 B 必需
 ```
+
+> 数据许可：Olist 数据集来自 Kaggle，许可为 **CC BY-NC-SA 4.0**（非商业使用）。
 
 ## 使用
 
