@@ -1,5 +1,5 @@
 # app/test_agent.py
-"""Agent 链路冒烟：3 个查询问题 + 1 个归因问题 + 1 个工作流问题端到端（需真实 API Key）。"""
+"""Agent 链路冒烟：3 个查询问题 + 1 个归因问题 + 2 个工作流问题端到端（需真实 API Key）。"""
 from app.agent import ask
 
 
@@ -10,11 +10,12 @@ def run():
         "流失概率高于80%的高价值用户有多少人？",
         "为什么这个用户流失风险高？用户ID是 97981245c3257ea9b14befffd560177b",
         "运行流失诊断",
+        "运行履约诊断",
     ]
     passed = 0
     for i, q in enumerate(questions):
         r = ask(q)
-        if i == 4:  # workflow 用例
+        if i in (4, 5):  # workflow 用例（流失诊断 / 履约诊断）
             ok = (r.get("workflow_result") is not None
                   and len(r["workflow_result"].get("steps", [])) == 4)
             passed += ok

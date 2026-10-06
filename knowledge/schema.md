@@ -113,7 +113,7 @@ ab_test_results: AB 实验敏感性分析表
 | geolocation_lat / geolocation_lng | DOUBLE | 经纬度 |
 | geolocation_city / geolocation_state | VARCHAR | 城市 / 州 |
 
-## user_wide（用户特征宽表，95,106 行 —— 流失分析的核心查询目标）
+## user_wide（用户特征宽表，94,983 行 —— 流失分析的核心查询目标）
 
 每行一个真实用户（customer_unique_id）。**绝大多数"流失分析"问题直接查此表，无需 JOIN。**
 

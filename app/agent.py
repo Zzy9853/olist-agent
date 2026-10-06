@@ -27,6 +27,7 @@ class State(TypedDict):
     error: str | None
     rag_context: str          # RAG 检索补充上下文（可空，retrieve 节点填充）
     intent: str               # query | explain | workflow | unsupported（gen_sql 节点判定）
+    workflow_name: str | None # 工作流类型：churn | funnel（gen_sql 节点判定，缺失默认 churn）
     uid: str | None           # 归因目标用户 ID（explain 路径填充）
     attribution: dict | None  # 归因结果（attribution 节点填充）
     workflow_result: dict | None  # 工作流结果（workflow 节点填充）
@@ -95,6 +96,7 @@ def _gen_sql(state: State) -> State:
     if intent == "workflow":
         state["sql"] = None
         state["error"] = None
+        state["workflow_name"] = out.get("workflow") or "churn"  # 旧格式兼容：默认流失诊断
         return state
     if intent == "unsupported":
         state["sql"] = None
@@ -196,9 +198,9 @@ def _attribution(state: State) -> State:
 
 
 def _workflow(state: State) -> State:
-    from app.workflow import run_churn_diagnosis
+    from app.workflow import run_churn_diagnosis, run_funnel_diagnosis
     try:
-        result = run_churn_diagnosis()
+        result = run_funnel_diagnosis() if state.get("workflow_name") == "funnel" else run_churn_diagnosis()
     except Exception as e:
         state["answer"] = f"工作流执行失败：{e}"
         return state
@@ -251,6 +253,7 @@ def ask(question: str, messages: list[dict] | None = None) -> dict:
         "error": None,
         "rag_context": "",
         "intent": "query",
+        "workflow_name": None,
         "uid": None,
         "attribution": None,
         "workflow_result": None,
@@ -296,6 +299,7 @@ def ask_stream(question: str, messages: list[dict] | None = None):
         "error": None,
         "rag_context": "",
         "intent": "query",
+        "workflow_name": None,
         "uid": None,
         "attribution": None,
         "workflow_result": None,

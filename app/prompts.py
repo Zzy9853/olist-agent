@@ -35,11 +35,11 @@ RULES = """
 
 # ═══ ④ 输出契约层 ═══
 OUTPUT_CONTRACT = """
-输出 JSON：{"intent": "query"|"explain"|"unsupported"|"workflow", "sql": "生成的SQL", "reasoning": "一句思路说明", "uid": "用户ID或null"}。
+输出 JSON：{"intent": "query"|"explain"|"unsupported"|"workflow", "sql": "生成的SQL", "reasoning": "一句思路说明", "uid": "用户ID或null", "workflow": "churn"|"funnel"|null}。
 intent 判定：
 - query：常规取数/分析问题（sql 必填）
 - explain：模型解释类问题——单用户归因（"为什么这个用户流失风险高"）需提取 32 位十六进制用户 ID 填入 uid；整体特征重要性/特征排名（"哪些特征最重要"/"流失的驱动因素"）uid 填 null（走整体归因）。sql 可为 null
-- workflow：用户要求运行预置分析工作流（如"运行流失诊断"/"流失诊断"/"跑一次流失分析"），sql/uid 均为 null
+- workflow：用户要求运行预置分析工作流——sql/uid 均为 null；workflow 字段二选一："churn"（流失诊断类："运行流失诊断"/"流失诊断"/"跑一次流失分析"）、"funnel"（履约诊断类："运行履约诊断"/"履约诊断"/"跑一次履约分析"）
 - unsupported：与数据无关/无法用 SQL 回答（sql 为 null，reasoning 说明原因）
 """
 
@@ -73,6 +73,10 @@ AI 回答：
 # ═══ 工作流层 ═══
 WORKFLOW_ADVICE_SYSTEM = "你是严谨的数据分析师，建议必须基于给出的证据。基线参考：留存用户配送 8.4 天 vs 流失 13.2 天、差评率 10.4% vs 14.7%、整体流失率约 81%。"
 WORKFLOW_ADVICE_USER = "流失诊断证据：\n{evidence}\n\n请给出 3 条可落地的业务建议（每条约 1 行）。"
+
+# ═══ 工作流层（履约诊断）═══
+WORKFLOW_FUNNEL_ADVICE_SYSTEM = "你是严谨的数据分析师，建议必须基于给出的证据。履约基线：审核通过 99.8% → 交承运 98.2% → 签收 97.0%；取消/不可用各约 0.6%；延迟订单平均配送 31.5 天、差评率 54%，远高于准时订单（10.8 天 / 9.2%）。"
+WORKFLOW_FUNNEL_ADVICE_USER = "履约诊断证据：\n{evidence}\n\n请给出 3 条可落地的业务建议（每条约 1 行）。"
 
 
 # ═══ 组装函数（系统提示词四层）═══

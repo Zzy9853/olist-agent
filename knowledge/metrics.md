@@ -18,12 +18,15 @@
 | **分期偏好用户** | 分期订单占比 > 30% | 单笔分期不足以代表偏好 |
 | **高价值用户** | total_revenue ≥ R$90（全体用户中位数） | AB 实验人群筛选阈值 |
 | **可挽救用户** | churn_prob 0.55-0.85 且 total_revenue ≥ R$90 | 中等风险 + 有挽回价值（19,890 人） |
+| **履约漏斗环节** | 审核通过 / 交承运 / 签收 = 对应时间戳（order_approved_at / order_delivered_carrier_date / order_delivered_customer_date）非空；取消、不可用按 order_status 单独统计，不计入转化分子 | 时间戳比 order_status（当前状态快照）更准确反映环节到达 |
+| **RFM 用户分层** | R = recency_days（≤ 中位数 224 天 = 近期）、F = order_count（>1 = 复购）、M = total_revenue（≥ 中位数 R$90 = 高消费），三维交叉 8 分层 | 全部字段已在 user_wide，可直接计算 |
+| **券投放 ROI** | ROI =（增量收入 − 总成本）/ 总成本；增量收入 = 触达人群 × 留存提升率 × 人均 LTV（R$245）；盈亏平衡 uplift = 总成本 ÷（人群基数 × 人均 LTV） | 与 ab_test_results 表及基线表口径一致 |
 
 ## 二、关键基线数字（解读查询结果时的参照系）
 
 | 基线 | 数值 |
 |------|------|
-| 整体流失率 | **81.2%**（95,106 用户中 77,220 流失） |
+| 整体流失率 | **81.2%**（94,983 用户中 77,129 流失） |
 | 首单复购率 | 仅约 3%（97% 用户只买一次） |
 | 留存用户平均配送天数 | 8.4 天 |
 | 流失用户平均配送天数 | 13.2 天（高 57%） |
@@ -38,6 +41,8 @@
 | R$25 券盈亏平衡 | 11.0% |
 | R$50 券盈亏平衡 | 22.0%（不现实，已否决） |
 | 流失用户累计贡献收入 | R$1,099 万（约合人民币 1,430 万） |
+| 履约漏斗（全部订单 99,441 单） | 审核通过 99.8% → 交承运 98.2% → 签收 97.0%；取消 0.6% / 不可用 0.6% |
+| 高价值久未购人群（R>224 天 且 M≥R$90） | **23,448 人**，平均消费 R$237.6 |
 
 ## 三、高频问题 → SQL 模板（few-shot 示例，可模仿改写）
 
@@ -97,6 +102,33 @@ SELECT Coupon, Uplift, "Saved Users", "Incremental Revenue", "Total Cost", ROI
 FROM ab_test_results
 WHERE Coupon = 15
 ORDER BY Uplift;
+
+-- Q8 订单履约漏斗（四段转化率 + 取消/不可用）
+SELECT COUNT(*) AS total_orders,
+       ROUND(SUM(CASE WHEN order_approved_at IS NOT NULL THEN 1 ELSE 0 END) * 1.0 / COUNT(*), 4) AS approved_rate,
+       ROUND(SUM(CASE WHEN order_delivered_carrier_date IS NOT NULL THEN 1 ELSE 0 END) * 1.0 / COUNT(*), 4) AS shipped_rate,
+       ROUND(SUM(CASE WHEN order_delivered_customer_date IS NOT NULL THEN 1 ELSE 0 END) * 1.0 / COUNT(*), 4) AS delivered_rate,
+       ROUND(SUM(CASE WHEN order_status = 'canceled' THEN 1 ELSE 0 END) * 1.0 / COUNT(*), 4) AS canceled_rate,
+       ROUND(SUM(CASE WHEN order_status = 'unavailable' THEN 1 ELSE 0 END) * 1.0 / COUNT(*), 4) AS unavailable_rate
+FROM orders;
+
+-- Q9 RFM 用户价值分层（R≤中位数=近期 / F>1=复购 / M≥中位数=高消费）
+WITH w AS (SELECT median(recency_days) AS r_med, median(total_revenue) AS m_med FROM user_wide)
+SELECT CASE WHEN u.recency_days <= w.r_med THEN 'R近期' ELSE 'R久未购' END AS r_band,
+       CASE WHEN u.order_count > 1 THEN 'F复购' ELSE 'F单次' END AS f_band,
+       CASE WHEN u.total_revenue >= w.m_med THEN 'M高消费' ELSE 'M低消费' END AS m_band,
+       COUNT(*) AS users,
+       ROUND(AVG(u.is_churned), 4) AS churn_rate,
+       ROUND(AVG(u.total_revenue), 2) AS avg_revenue
+FROM user_wide u, w
+GROUP BY 1, 2, 3
+ORDER BY 1, 2, 3;
+
+-- Q10 相同留存提升下各券额 ROI 对比（选最优券额；Uplift 为浮点，须 ROUND 后比较）
+SELECT ROUND(Uplift, 2) AS uplift, Coupon, ROI
+FROM ab_test_results
+WHERE ROUND(Uplift, 2) = 0.15
+ORDER BY ROI DESC;
 ```
 
 ## 四、SQL 生成规则（Agent 的硬约束）
@@ -112,3 +144,4 @@ ORDER BY Uplift;
 9. 时间类比较用 TIMESTAMP 列直接比较，不要转字符串。
 10. 列名带空格或大写时用双引号引用（如 "Saved Users"），DuckDB 中双引号是标识符。
 11. **特征重要性/特征排名数据来自 XGBoost 模型（feature_importances_/SHAP），数据库中不存在**——禁止用 SQL 查询或硬编码数值（如 0.168 AS importance 是虚构）。此类问题由模型解释路径回答，不走 SQL。
+12. **履约类问题用 orders 时间戳字段判断环节**（order_approved_at / order_delivered_carrier_date / order_delivered_customer_date 非空），不要用 order_status 反推转化（它是当前状态快照）；取消/不可用按 order_status 单独口径。

@@ -30,7 +30,7 @@ h1 { color: #4a6b5a; }
 """
 st.markdown(_CSS, unsafe_allow_html=True)
 st.title("📊 Olist 智能问数 Agent")
-st.caption("用中文问 Olist 巴西电商数据——自由问答、流失诊断、归因解释，历史会话自动保存。")
+st.caption("用中文问 Olist 巴西电商数据——自由问答、流失诊断、履约诊断、归因解释，历史会话自动保存。")
 
 
 def _group_label(ts: float) -> str:
@@ -242,7 +242,9 @@ def main():
         st.markdown("---")
         st.markdown("### 预置分析")
         if st.button("📊 运行流失诊断", width="stretch"):
-            st.session_state.pending_workflow = True
+            st.session_state.pending_workflow = "运行流失诊断"
+        if st.button("🚚 运行履约诊断", width="stretch"):
+            st.session_state.pending_workflow = "运行履约诊断"
 
     current_id = st.session_state.current_id
     conv = (st.session_state.conversations.get(current_id)
@@ -252,14 +254,14 @@ def main():
     # 空状态欢迎页
     if not messages:
         st.markdown("#### 试试这些问题：")
-        c1, c2, c3, c4 = st.columns(4)
+        cols = st.columns(5)
         examples = [
             ("整体流失率", "整体用户流失率是多少？"),
             ("Top5 品类", "物流延迟率最高的 5 个品类有哪些？"),
             ("流失诊断", "运行流失诊断"),
+            ("履约诊断", "运行履约诊断"),
             ("用户归因", "为什么这个用户流失风险高？用户ID是 97981245c3257ea9b14befffd560177b"),
         ]
-        cols = [c1, c2, c3, c4]
         for col, (label, q) in zip(cols, examples):
             with col:
                 if st.button(label, width="stretch"):
@@ -281,11 +283,13 @@ def main():
 
     # 工作流按钮消费（渲染循环后，与 chat_input 对称）
     if st.session_state.get("pending_workflow"):
-        st.session_state.pending_workflow = False
+        wf_prompt = st.session_state.pop("pending_workflow")
+        if wf_prompt is True:  # 兼容旧布尔值（热重载残留）
+            wf_prompt = "运行流失诊断"
         if st.session_state.current_id is None:
             cid, _ = new_conversation(st.session_state.conversations)
             st.session_state.current_id = cid
-        _handle_prompt("运行流失诊断", st.session_state.conversations[st.session_state.current_id])
+        _handle_prompt(wf_prompt, st.session_state.conversations[st.session_state.current_id])
         st.rerun()
 
     # 输入框

@@ -31,7 +31,7 @@ olist_agent/
 ├── data/olist.db              # DuckDB 数据库（只读；由 scripts/prepare_db.py 重建）
 ├── knowledge/
 │   ├── schema.md              # 数据字典（11 张表/视图：类型、含义、陷阱）
-│   └── metrics.md             # 指标口径字典 + 7 条 SQL 模板 + 10 条生成规则
+│   └── metrics.md             # 指标口径字典 + 10 条 SQL 模板 + 12 条生成规则
 ├── scripts/
 │   └── prepare_db.py          # 数据库构建脚本（M1 产物；自包含：9 基础表 + 宽表 + churn_prob + AB 表）
 ├── sql/

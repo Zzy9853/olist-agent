@@ -4,6 +4,8 @@
 放宽原因：LLM 自由起别名/增减列是正常行为，按列名严格对比会误报（如 churned_users vs churned）。
 """
 import sys
+import io
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")  # Windows GBK 控制台打印 ❌ 会崩溃（2026-09-24 实测），强制 UTF-8
 import pandas as pd
 
 from app.agent import ask
