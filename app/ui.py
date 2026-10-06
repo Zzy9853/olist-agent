@@ -83,7 +83,7 @@ def _render_bar_chart(df: pd.DataFrame, key: str | None = None):
                           xaxis_title=str(x_col), yaxis_title=str(y_col),
                           height=min(260, 40 * len(df) + 70))
         fig.update_xaxes(tickangle=0)
-        st.plotly_chart(fig, use_container_width=True,
+        st.plotly_chart(fig, width="stretch",
                         key=f"{key}_{suffix}" if key else None)
 
     if len(y_cols) == 2:
@@ -98,7 +98,7 @@ def _render_bar_chart(df: pd.DataFrame, key: str | None = None):
                           xaxis_title=str(x_col), showlegend=True,
                           height=min(320, 44 * len(df) + 90))
         fig.update_xaxes(tickangle=0)
-        st.plotly_chart(fig, use_container_width=True, key=key)
+        st.plotly_chart(fig, width="stretch", key=key)
 
 
 def render_chart(result_df: pd.DataFrame | None, key: str | None = None):
@@ -127,7 +127,7 @@ def _render_attribution_chart(features: list[dict], key: str | None = None):
     fig.update_layout(height=min(320, 44 * len(features) + 90),
                       margin=dict(l=110, r=20, t=10, b=10),
                       xaxis_title="SHAP 值", showlegend=False)
-    st.plotly_chart(fig, use_container_width=True, key=key)
+    st.plotly_chart(fig, width="stretch", key=key)
 
 
 def _render_messages(messages: list[dict]):
@@ -210,7 +210,7 @@ def main():
     # 侧边栏：新会话 + 历史列表 + 预置分析
     with st.sidebar:
         st.markdown("### 会话")
-        if st.button("＋ 新对话", use_container_width=True, type="primary"):
+        if st.button("＋ 新对话", width="stretch", type="primary"):
             st.session_state.current_id = None
             st.rerun()
         convs = st.session_state.conversations
@@ -228,12 +228,12 @@ def main():
                 st.markdown(f"**{g}**")
                 for cid in groups[g]:
                     is_current = cid == st.session_state.current_id
-                    if st.button(_conv_label(convs[cid], is_current), use_container_width=True,
+                    if st.button(_conv_label(convs[cid], is_current), width="stretch",
                                  type="primary" if is_current else "secondary",
                                  key=f"conv_btn_{cid}"):
                         st.session_state.current_id = cid
                         st.rerun()
-            if st.button("🗑 删除当前会话", use_container_width=True, type="secondary"):
+            if st.button("🗑 删除当前会话", width="stretch", type="secondary"):
                 if st.session_state.current_id is not None:
                     delete_conversation(st.session_state.conversations, st.session_state.current_id)
                 st.session_state.current_id = None
@@ -241,7 +241,7 @@ def main():
                 st.rerun()
         st.markdown("---")
         st.markdown("### 预置分析")
-        if st.button("📊 运行流失诊断", use_container_width=True):
+        if st.button("📊 运行流失诊断", width="stretch"):
             st.session_state.pending_workflow = True
 
     current_id = st.session_state.current_id
@@ -262,7 +262,7 @@ def main():
         cols = [c1, c2, c3, c4]
         for col, (label, q) in zip(cols, examples):
             with col:
-                if st.button(label, use_container_width=True):
+                if st.button(label, width="stretch"):
                     st.session_state.pending_prompt = q
                     st.rerun()
 
